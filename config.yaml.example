@@ -1,0 +1,19 @@
+# cc2go 配置模板
+# 复制此文件为 .env 并填入真实值（.env 已被 gitignore，不会提交）
+
+# OpenCode Go API 配置
+OPENCODE_BASE_URL=https://opencode.ai/zen/go
+OPENCODE_API_KEY=your-api-key-here
+
+# Router 服务配置
+ROUTER_HOST=0.0.0.0
+ROUTER_PORT=4000
+ROUTER_MASTER_KEY=sk-your-master-key
+
+# 重试配置
+MAX_RETRY=3
+RETRY_DELAY=1.0
+
+# 日志配置
+LOG_LEVEL=INFO
+LOG_FILE=router.log

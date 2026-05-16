@@ -1,0 +1,45 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+.venv/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# 日志
+*.log
+router.log
+
+# 统计持久化
+stats.json
+
+# 自定义模型
+custom_models.json
+
+# 模型缓存
+models_cache.json
+
+# 环境配置（包含密钥）
+.env
+config.yaml
+config.local.yaml
+litellm_config.yaml
+
+# macOS
+.DS_Store
+
+# Windows
+Thumbs.db
+
+# 测试
+.pytest_cache/
+.coverage
+htmlcov/
