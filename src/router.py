@@ -525,6 +525,9 @@ async def anthropic_messages(request: Request):
         # MiniMax 用 /v1/messages 端点
         if endpoint == "/v1/messages":
             body["thinking"] = {"type": "disabled"}
+            # MiniMax rejects json_schema output when no tools provided
+            if not tools and body.get("output_config", {}).get("format", {}).get("type") == "json_schema":
+                del body["output_config"]
             if config.detailed_logging:
                 logger.debug(f"[MiniMax Payload] {json.dumps(body, ensure_ascii=False)[:1000]}")
             logger.debug(f"[Payload] Direct forward to {endpoint} with thinking disabled")
