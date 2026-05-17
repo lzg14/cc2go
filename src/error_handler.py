@@ -126,26 +126,22 @@ def classify_and_suggest_action(
 
 # ============ 归档限速 ============
 class ErrorArchiveRateLimiter:
-    """错误归档限速：5 分钟内最多归档 N 次"""
+    """错误归档限速：window_seconds 内最多归档 1 次"""
 
-    def __init__(self, window_seconds: float = 300.0, max_per_window: int = 10):
+    def __init__(self, window_seconds: float = 30.0):
         self.window = window_seconds
-        self.max_per_window = max_per_window
-        self._timestamps: List[float] = []
+        self._last_archive: float = 0.0
         self._lock = threading.Lock()
 
-    def can_archive(self) -> bool:
+    def update(self, window_seconds: float):
         with self._lock:
-            now = time.time()
-            self._timestamps = [ts for ts in self._timestamps if now - ts < self.window]
-            return len(self._timestamps) < self.max_per_window
+            self.window = window_seconds
 
     def archive(self) -> bool:
         now = time.time()
         with self._lock:
-            self._timestamps = [ts for ts in self._timestamps if now - ts < self.window]
-            if len(self._timestamps) < self.max_per_window:
-                self._timestamps.append(time.time())
+            if now - self._last_archive >= self.window:
+                self._last_archive = now
                 return True
             logger.debug("[ArchiveRateLimit] 限速跳过归档")
             return False

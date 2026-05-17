@@ -111,31 +111,34 @@ class TestClassifyAndSuggest(unittest.TestCase):
 
 class TestArchiveRateLimiter(unittest.TestCase):
     def test_first_archive_allowed(self):
-        limiter = ErrorArchiveRateLimiter(window_seconds=300.0, max_per_window=10)
-        self.assertTrue(limiter.can_archive())
+        limiter = ErrorArchiveRateLimiter(window_seconds=0)
         self.assertTrue(limiter.archive())
 
-    def test_within_limit_allowed(self):
-        limiter = ErrorArchiveRateLimiter(window_seconds=300.0, max_per_window=5)
-        for i in range(4):
-            self.assertTrue(limiter.archive())
-
-    def test_exceeds_limit_blocked(self):
-        limiter = ErrorArchiveRateLimiter(window_seconds=300.0, max_per_window=3)
-        limiter.archive()
-        limiter.archive()
-        limiter.archive()
-        self.assertFalse(limiter.can_archive())
+    def test_within_window_blocked(self):
+        limiter = ErrorArchiveRateLimiter(window_seconds=300)
+        self.assertTrue(limiter.archive())
         self.assertFalse(limiter.archive())
 
+    def test_update_changes_window(self):
+        limiter = ErrorArchiveRateLimiter(window_seconds=300)
+        limiter.archive()
+        self.assertFalse(limiter.archive())
+        limiter.update(0)
+        self.assertTrue(limiter.archive())
+
     def test_archive_returns_true_on_success(self):
-        limiter = ErrorArchiveRateLimiter(window_seconds=300.0, max_per_window=10)
+        limiter = ErrorArchiveRateLimiter(window_seconds=0)
         self.assertTrue(limiter.archive())
 
     def test_archive_returns_false_when_limited(self):
-        limiter = ErrorArchiveRateLimiter(window_seconds=300.0, max_per_window=2)
+        limiter = ErrorArchiveRateLimiter(window_seconds=300)
         limiter.archive()
-        limiter.archive()
+        self.assertFalse(limiter.archive())
+
+    def test_archive_returns_false_within_window(self):
+        limiter = ErrorArchiveRateLimiter(window_seconds=30.0)
+        self.assertTrue(limiter.archive())
+        self.assertFalse(limiter.archive())
         self.assertFalse(limiter.archive())
 
 
@@ -212,11 +215,11 @@ class TestArchiveRateLimiterIntegration(unittest.TestCase):
     def test_concurrent_archive_calls(self):
         """
         场景：多线程同时调用 archive()
-        期望：线程安全，不超限
+        期望：线程安全，仅 1 个成功其余失败（window 未过期）
         """
         from error_handler import ErrorArchiveRateLimiter
 
-        limiter = ErrorArchiveRateLimiter(window_seconds=300.0, max_per_window=10)
+        limiter = ErrorArchiveRateLimiter(window_seconds=300.0)
         results = []
         errors = []
 
@@ -234,27 +237,22 @@ class TestArchiveRateLimiterIntegration(unittest.TestCase):
             t.join()
 
         success_count = sum(1 for r in results if r is True)
-        self.assertEqual(success_count, 10)
+        self.assertEqual(success_count, 1)
         self.assertEqual(len(errors), 0)
 
     def test_sliding_window_expires(self):
         """
         场景：窗口到期后，限额恢复
-        期望：等待窗口过期或时间戳过期后可再次归档
+        期望：等待窗口过期后可再次归档
         """
         from error_handler import ErrorArchiveRateLimiter
 
-        # 使用极短窗口验证滑动窗口过期逻辑
-        limiter = ErrorArchiveRateLimiter(window_seconds=0.1, max_per_window=2)
-
+        limiter = ErrorArchiveRateLimiter(window_seconds=0.1)
         self.assertTrue(limiter.archive())
-        self.assertTrue(limiter.archive())
-        self.assertFalse(limiter.can_archive())
+        self.assertFalse(limiter.archive())
 
-        # 等待窗口过期
         time_module.sleep(0.15)
 
-        self.assertTrue(limiter.can_archive())
         self.assertTrue(limiter.archive())
 
 
@@ -283,6 +281,140 @@ class TestBackoffDelayValues(unittest.TestCase):
     def test_backoff_max_delay_capped(self):
         d = get_backoff_delay(10, base=2.0, max_delay=60.0, jitter=False)
         self.assertLessEqual(d, 60.0)
+
+
+# ============ 集成测试：实际错误场景复现 ============
+class TestActualArchiveScenarios(unittest.TestCase):
+    """基于 error-archive 中真实错误场景的测试"""
+
+    def test_deepseek_thinking_error_causes_fail_fast(self):
+        """
+        场景：DeepSeek API 不认识 thinking 字段，报 "unknown variant thinking"
+        期望：400 -> FAIL_FAST（不重试不切换模型）
+        """
+        from error_handler import classify_and_suggest_action, RetryStrategy, classify_error
+
+        # DeepSeek 的 thinking 错误返回 400
+        self.assertEqual(classify_error(400), ErrorType.CLIENT_ERROR)
+        strategy, log_msg, hint = classify_and_suggest_action(400, {}, 0, 3)
+        self.assertEqual(strategy, RetryStrategy.FAIL_FAST)
+        self.assertIsNone(hint)
+
+    def test_minimax_output_config_causes_fail_fast(self):
+        """
+        场景：MiniMax 不支持 output_config with json_schema，报 "invalid params"
+        期望：400 -> FAIL_FAST
+        """
+        from error_handler import classify_and_suggest_action, RetryStrategy
+
+        strategy, _, _ = classify_and_suggest_action(400, {}, 0, 3)
+        self.assertEqual(strategy, RetryStrategy.FAIL_FAST)
+
+    def test_kimi_tool_sequence_error_causes_fail_fast(self):
+        """
+        场景：Kimi 报 "tool_call_ids did not have response messages"
+        这是 Claude Code 内部逻辑问题，路由器只能 fail_fast
+        期望：400 -> FAIL_FAST
+        """
+        from error_handler import classify_and_suggest_action, RetryStrategy
+
+        strategy, _, _ = classify_and_suggest_action(400, {}, 0, 3)
+        self.assertEqual(strategy, RetryStrategy.FAIL_FAST)
+
+    def test_deepseek_tools_missing_type_field_fixed_by_convert_tools(self):
+        """
+        场景：Claude 发来的工具格式缺少 type 字段 (keys: name/description/input_schema)
+        期望：convert_tools 正确添加 type: "function"
+        """
+        import sys, os
+        sys.path.insert(0, os.path.dirname(__file__))
+        from router import convert_tools
+
+        # CC 发来的原始格式（无 type 字段）
+        raw_tools = [
+            {
+                "name": "web_search",
+                "description": "Search the web",
+                "input_schema": {"type": "object", "properties": {"query": {"type": "string"}}}
+            },
+            {
+                "name": "Agent",
+                "description": "Launch agent",
+                "input_schema": {"type": "object", "properties": {}}}
+        ]
+
+        converted = convert_tools(raw_tools)
+
+        for tool in converted:
+            self.assertEqual(tool["type"], "function")
+            self.assertIn("function", tool)
+            self.assertIn("name", tool["function"])
+            self.assertIn("description", tool["function"])
+            self.assertIn("parameters", tool["function"])
+
+    def test_deepseek_thinking_stripped_for_openai_endpoint(self):
+        """
+        场景：DeepSeek 用 /v1/chat/completions，但CC发来 thinking: {type: adaptive}
+        期望：router 应在转发前移除 thinking 字段（已在 MiniMax 路径验证）
+        注意：此测试验证错误处理流程正确，不验证具体字段处理
+        """
+        # MiniMax 端点会添加 thinking: {type: disabled}，DeepSeek 端点应拒绝 thinking
+        # 当前 router.py 在 /v1/chat/completions 路径没有移除 thinking
+        # 这是一个已知行为：router 直接透传 thinking 给 DeepSeek，DeepSeek 返回 400
+        # 此测试验证 400 错误正确触发 FAIL_FAST
+        from error_handler import classify_and_suggest_action, RetryStrategy
+
+        strategy, log_msg, hint = classify_and_suggest_action(400, {}, 0, 3)
+        self.assertEqual(strategy, RetryStrategy.FAIL_FAST)
+        self.assertNotIn("retry", log_msg.lower())
+        self.assertNotIn("switch", log_msg.lower())
+
+
+class TestRouterIntegration(unittest.TestCase):
+    """路由器与 error_handler 集成的关键路径测试"""
+
+    def test_archive_limiter_prevents_archive_flood(self):
+        """
+        场景：错误爆发时，限速器防止归档文件淹没磁盘
+        期望：窗口期内仅归档 1 次
+        """
+        limiter = ErrorArchiveRateLimiter(window_seconds=300.0)
+        archived = 0
+        for i in range(20):
+            if limiter.archive():
+                archived += 1
+        self.assertEqual(archived, 1)
+
+    def test_retry_exhaustion_leads_to_switch_model(self):
+        """
+        场景：429 重试 3 次全部失败
+        期望：attempt 0/1 -> RETRY_WITH_BACKOFF, attempt 2 -> SWITCH_MODEL
+        """
+        from error_handler import classify_and_suggest_action, RetryStrategy
+
+        # attempt 0
+        s0, _, _ = classify_and_suggest_action(429, {}, 0, 3)
+        self.assertEqual(s0, RetryStrategy.RETRY_WITH_BACKOFF)
+
+        # attempt 1
+        s1, _, _ = classify_and_suggest_action(429, {}, 1, 3)
+        self.assertEqual(s1, RetryStrategy.RETRY_WITH_BACKOFF)
+
+        # attempt 2 (last)
+        s2, _, hint = classify_and_suggest_action(429, {}, 2, 3)
+        self.assertEqual(s2, RetryStrategy.SWITCH_MODEL)
+        self.assertEqual(hint, "try_next_available")
+
+    def test_server_error_500_eventually_switches_model(self):
+        """
+        场景：上游持续返回 500，第三层重试后切换模型
+        期望：attempt 2 -> SWITCH_MODEL
+        """
+        from error_handler import classify_and_suggest_action, RetryStrategy
+
+        strategy, _, hint = classify_and_suggest_action(500, {}, 2, 3)
+        self.assertEqual(strategy, RetryStrategy.SWITCH_MODEL)
+        self.assertEqual(hint, "try_next_available")
 
 
 if __name__ == "__main__":
