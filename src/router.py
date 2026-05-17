@@ -24,10 +24,15 @@ load_dotenv()
 
 
 def get_base_dir():
-    """运行时目录，兼容 PyInstaller onefile 打包"""
+    """项目根目录，兼容 PyInstaller onefile 打包"""
     if getattr(sys, 'frozen', False):
         return sys._MEIPASS
-    return os.path.dirname(os.path.abspath(__file__))
+    return os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+
+# 确保运行时目录存在
+for _rd in ("data", "logs"):
+    os.makedirs(os.path.join(get_base_dir(), _rd), exist_ok=True)
 
 
 VERSION = "0.5.0"
@@ -48,7 +53,7 @@ DEFAULT_MODELS = {
     "minimax-m2.5": {"id": "minimax-m2.5", "endpoint": "/v1/messages"},
 }
 
-CUSTOM_MODELS_FILE = os.path.join(get_base_dir(), "custom_models.json")
+CUSTOM_MODELS_FILE = os.path.join(get_base_dir(), "data", "custom_models.json")
 
 def load_custom_models():
     try:
@@ -80,7 +85,7 @@ class Config:
         self.max_retry = int(os.getenv("MAX_RETRY", "3"))
         self.retry_delay = float(os.getenv("RETRY_DELAY", "1.0"))
         self.log_level = os.getenv("LOG_LEVEL", "INFO")
-        self.log_file = os.getenv("LOG_FILE", "router.log")
+        self.log_file = os.getenv("LOG_FILE", os.path.join(get_base_dir(), "logs", "router.log"))
         self.disable_thinking = os.getenv("DISABLE_THINKING", "true").lower() == "true"
         self.detailed_logging = os.getenv("DETAILED_LOGGING", "true").lower() == "true"
         self.selected_model = os.getenv("SELECTED_MODEL", "")
@@ -122,7 +127,7 @@ except:
     pass
 
 # 请求统计（持久化到文件）
-STATS_FILE = os.path.join(get_base_dir(), "stats.json")
+STATS_FILE = os.path.join(get_base_dir(), "data", "stats.json")
 def load_stats():
     try:
         with open(STATS_FILE, "r") as f:
@@ -1441,7 +1446,7 @@ applyLang();
 # ============ 启动 ============
 def refresh_models():
     """从上游拉取模型列表，成功则缓存到本地，失败用缓存或默认"""
-    cache_file = os.path.join(get_base_dir(), "models_cache.json")
+    cache_file = os.path.join(get_base_dir(), "data", "models_cache.json")
     url = f"{config.opencode_base_url}/v1/models"
     headers = {
         "Authorization": f"Bearer {config.opencode_api_key}",

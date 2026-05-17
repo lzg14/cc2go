@@ -10,7 +10,7 @@ import zipfile
 import subprocess
 from pathlib import Path
 
-from router import VERSION
+from src.router import VERSION
 
 PROJECT_DIR = Path(__file__).parent
 DIST_DIR = PROJECT_DIR / "dist"
@@ -44,6 +44,7 @@ def build_exe(name, entry_point, icon=None):
         "--windowed" if "tray" in name else "--console",
         "--add-data", f"static{os.pathsep}static",
         "--hidden-import", "httpx",
+        "--hidden-import", "requests",
         "--hidden-import", "pystray",
         "--hidden-import", "PIL",
         "--hidden-import", "PIL._imaging",
@@ -201,8 +202,8 @@ def main():
     clean()
 
     # 打包两个 exe
-    build_exe("cc2go", "router.py")
-    build_exe("cc2go-tray", "tray.py", icon="static/favicon.ico")
+    build_exe("cc2go", "src/router.py")
+    build_exe("cc2go-tray", "src/tray.py", icon="static/favicon.ico")
 
     # 收集发布文件
     collect_release()

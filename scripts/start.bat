@@ -6,7 +6,7 @@ echo.
 echo Starting cc2go...
 echo.
 
-cd /d "%~dp0"
+cd /d "%~dp0.."
 
 if not exist .env (
     echo Creating default .env...
@@ -14,6 +14,6 @@ if not exist .env (
 )
 
 echo Starting server...
-python router.py
+python src\router.py
 
 pause

@@ -8,7 +8,7 @@ echo "  cc2go 启动中..."
 echo "═══════════════════════════════════════"
 echo ""
 
-cd "$(dirname "$0")"
+cd "$(dirname "$0")/.."
 
 if [ ! -f ".env" ]; then
     echo "[配置] .env 不存在，创建默认配置..."
@@ -16,4 +16,4 @@ if [ ! -f ".env" ]; then
 fi
 
 echo "[启动] 正在启动 cc2go..."
-python3 router.py
+python3 src/router.py

@@ -34,17 +34,17 @@ Download the latest release from [GitHub Releases](https://github.com/lzg14/cc2g
 ```bash
 pip install -r requirements.txt
 cp .env.example .env   # Edit .env with your API key
-python router.py
+python src/router.py
 ```
 
 Or use the scripts (Windows):
 ```
-start.bat       # Foreground mode (shows terminal)
-start_bg.bat    # Background mode (system tray, no terminal)
-stop.bat        # Stop background process
+scripts\start.bat       # Foreground mode (shows terminal)
+scripts\start_bg.bat    # Background mode (system tray, no terminal)
+scripts\stop.bat        # Stop background process
 ```
 
-With `start_bg.bat`, cc2go runs silently in your system tray. Double-click the tray icon to open the admin page, right-click for menu → Exit.
+With `scripts\start_bg.bat`, cc2go runs silently in your system tray. Double-click the tray icon to open the admin page, right-click for menu → Exit.
 
 Open `http://localhost:4000` → enter API Key → select a model.
 
@@ -116,17 +116,17 @@ All configuration can be managed via the Web UI (`http://localhost:4000`):
 ```bash
 pip install -r requirements.txt
 cp .env.example .env   # 编辑 .env 填入 API Key
-python router.py
+python src/router.py
 ```
 
 也可使用脚本启动（Windows）：
 ```
-start.bat       # 前台模式（弹出终端窗口）
-start_bg.bat    # 后台托盘模式（不弹窗口，系统托盘运行）
-stop.bat        # 停止后台进程
+scripts\start.bat       # 前台模式（弹出终端窗口）
+scripts\start_bg.bat    # 后台托盘模式（不弹窗口，系统托盘运行）
+scripts\stop.bat        # 停止后台进程
 ```
 
-`start_bg.bat` 启动后会在系统托盘显示图标，双击打开管理页，右键菜单可退出。
+`scripts\start_bg.bat` 启动后会在系统托盘显示图标，双击打开管理页，右键菜单可退出。
 
 打开 `http://localhost:4000` → 填入 API Key → 选择模型即可使用。
 

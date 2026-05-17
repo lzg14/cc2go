@@ -1,6 +1,6 @@
 @echo off
 chcp 65001 > nul
-cd /d "%~dp0"
+cd /d "%~dp0.."
 
 if not exist .env (
     echo Creating default .env...
@@ -8,9 +8,9 @@ if not exist .env (
 )
 
 echo Starting cc2go in system tray...
-powershell -Command "Start-Process -WindowStyle Hidden -FilePath 'python' -ArgumentList 'tray.py' -WorkingDirectory '%~dp0'"
+powershell -Command "Start-Process -WindowStyle Hidden -FilePath 'python' -ArgumentList 'src\tray.py' -WorkingDirectory '%cd%'"
 echo cc2go is running in system tray.
 echo To open the admin page, double-click the tray icon.
-echo To stop, run: stop.bat
+echo To stop, run: scripts\stop.bat
 echo.
 pause

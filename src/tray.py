@@ -15,16 +15,16 @@ from PIL import Image, ImageDraw, ImageFont
 
 
 def get_base_dir():
-    """运行时目录，兼容 PyInstaller onefile 打包"""
+    """项目根目录，兼容 PyInstaller onefile 打包"""
     if getattr(sys, 'frozen', False):
         return sys._MEIPASS
-    return os.path.dirname(os.path.abspath(__file__))
+    return os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 os.chdir(get_base_dir())
 
 from router import app, config, logger, VERSION
 
-PID_FILE = os.path.join(get_base_dir(), "cc2go.pid")
+PID_FILE = os.path.join(get_base_dir(), "data", "cc2go.pid")
 
 
 def save_pid():
