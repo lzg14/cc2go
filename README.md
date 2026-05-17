@@ -39,7 +39,6 @@ python src/router.py
 
 Or use the scripts (Windows):
 ```
-scripts\start.bat       # Foreground mode (shows terminal)
 scripts\start_bg.bat    # Background mode (system tray, no terminal)
 scripts\stop.bat        # Stop background process
 ```
@@ -121,7 +120,6 @@ python src/router.py
 
 也可使用脚本启动（Windows）：
 ```
-scripts\start.bat       # 前台模式（弹出终端窗口）
 scripts\start_bg.bat    # 后台托盘模式（不弹窗口，系统托盘运行）
 scripts\stop.bat        # 停止后台进程
 ```

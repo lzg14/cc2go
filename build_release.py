@@ -104,10 +104,6 @@ def collect_release():
             print(f"警告: 缺少文件 {item}，发布包可能不完整")
 
     # 创建快捷批处理
-    (RELEASE_DIR / "start.bat").write_text(
-        '@echo off\ncd /d "%~dp0"\nstart "" cc2go.exe\n',
-        encoding="utf-8"
-    )
     (RELEASE_DIR / "start_bg.bat").write_text(
         '@echo off\ncd /d "%~dp0"\nstart "" cc2go-tray.exe\n',
         encoding="utf-8"
@@ -155,9 +151,7 @@ Claude Code → OpenCode Go 适配器
 
 | 文件 | 说明 |
 |------|------|
-| `cc2go.exe` | 前台模式（显示终端窗口，适合调试） |
 | `cc2go-tray.exe` | 托盘模式（后台运行，推荐） |
-| `start.bat` | 启动前台模式 |
 | `start_bg.bat` | 启动托盘模式 |
 | `stop.bat` | 停止运行 |
 | `.env` | 配置文件（需自行创建） |
