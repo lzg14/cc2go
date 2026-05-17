@@ -91,7 +91,6 @@ def setup_logger():
     logger.setLevel(getattr(logging, config.log_level.upper()))
     file_handler = RotatingFileHandler(config.log_file, encoding="utf-8", maxBytes=5*1024*1024, backupCount=3)
     console_handler = logging.StreamHandler()
-    console_handler = logging.StreamHandler()
     formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
     file_handler.setFormatter(formatter)
     console_handler.setFormatter(formatter)
@@ -385,20 +384,17 @@ async def call_opencode(endpoint: str, payload: dict, base_url: str = None, api_
         "Content-Type": "application/json",
         "x-api-key": key
     }
-
-    for attempt in range(config.max_retry):
-        try:
-            async with httpx.AsyncClient(timeout=180.0) as client:
+    async with httpx.AsyncClient(timeout=180.0) as client:
+        for attempt in range(config.max_retry):
+            try:
                 response = await client.post(url, headers=headers, json=payload)
                 if response.status_code < 500:
                     return response
                 logger.warning(f"Attempt {attempt + 1} failed: {response.status_code}")
-        except Exception as e:
-            logger.warning(f"Attempt {attempt + 1} error: {e}")
-
-        if attempt < config.max_retry - 1:
-            await asyncio.sleep(config.retry_delay * (attempt + 1))
-
+            except Exception as e:
+                logger.warning(f"Attempt {attempt + 1} error: {e}")
+            if attempt < config.max_retry - 1:
+                await asyncio.sleep(config.retry_delay * (attempt + 1))
     raise HTTPException(status_code=500, detail="OpenCode API 调用失败")
 
 
@@ -469,7 +465,6 @@ async def anthropic_messages(request: Request):
 
         # MiniMax 用 /v1/messages 端点
         if endpoint == "/v1/messages":
-            # 添加思考模式禁用
             body["thinking"] = {"type": "disabled"}
             logger.debug(f"[Payload] Direct forward to {endpoint} with thinking disabled")
             response = await call_opencode(endpoint, body, api_key=custom_key, base_url=custom_base)
@@ -479,15 +474,13 @@ async def anthropic_messages(request: Request):
                 logger.error(f"[Error] OpenCode API status={response.status_code}: {error_detail[:500]}")
                 raise HTTPException(status_code=response.status_code, detail=error_detail)
 
-            # 全量日志：上游原始响应
+            raw_text = response.text
             if config.detailed_logging:
-                try:
-                    result = response.json()
-                    logger.info(f"[Raw Response] model={model_name}, full={json.dumps(result, ensure_ascii=False)[:2000]}")
-                except:
-                    logger.error(f"[Raw Response] model={model_name}, not JSON: {response.text[:2000]}")
-                    result = {"type": "message", "content": [{"type": "text", "text": response.text}]}
-                return JSONResponse(content=result)
+                logger.info(f"[Raw Response] model={model_name}, body={raw_text[:2000]}")
+            try:
+                result = json.loads(raw_text) if raw_text else {}
+            except:
+                result = {"type": "message", "content": [{"type": "text", "text": raw_text}]}
 
             duration = time.time() - start_time
             request_count += 1; save_stats()
@@ -768,10 +761,13 @@ async def update_config_api(updates: dict):
         update_env_file(**env_updates)
 
     # 同步到 Claude Code 配置：模型名、BASE_URL、Auth Token
-    try:
-        sync_claude_settings()
-    except Exception as e:
-        logger.warning(f"[Config] 同步 Claude Code 配置失败: {e}")
+    # 同步到 Claude Code 配置（仅当影响 CC 的字段变更时）
+    cc_env_keys = {"SELECTED_MODEL", "CLAUDE_MODEL_ALIAS", "ROUTER_HOST", "ROUTER_PORT", "ROUTER_MASTER_KEY"}
+    if env_updates and any(k in env_updates for k in cc_env_keys):
+        try:
+            sync_claude_settings()
+        except Exception as e:
+            logger.warning(f"[Config] 同步 Claude Code 配置失败: {e}")
 
     return {"status": "ok", "updated": list(env_updates.keys())}
 
@@ -790,11 +786,7 @@ async def get_custom_models():
 @app.put("/api/custom-models")
 async def save_custom_models_api(models: list = Body(...)):
     save_custom_models(models)
-    config.models = merge_models(DEFAULT_MODELS if not hasattr(config, 'opencode_base_url') else config.models, models)
-    if hasattr(config, 'opencode_base_url'):
-        refresh_models()
-    else:
-        config.models = merge_models(DEFAULT_MODELS, models)
+    refresh_models()
     return {"status": "ok", "count": len(models)}
 
 
@@ -882,7 +874,6 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','SF Pro Display',sy
  .modal-overlay{background:rgba(0,0,0,.6)}
 }
 </style>
-</style>
 </head>
 <body>
 <div class="container">
@@ -935,7 +926,6 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','SF Pro Display',sy
 <a href="https://opencode.ai/zh/go" target="_blank" style="font-size:11px;color:#0071e3;text-decoration:none;white-space:nowrap" data-i18n="getKey">获取 Key</a>
 </div>
 </div></div>
-<div class="form-row"><button class="btn btn-secondary" style="flex:none;padding:8px 16px;font-size:13px" onclick="fetchModels()">🔄 <span data-i18n="refreshModels">刷新模型列表</span></button></div>
 <div class="modal-actions"><button class="btn btn-secondary" style="flex:none;padding:8px 20px" onclick="closeModal('connModal')" data-i18n="cancel">取消</button><button class="btn btn-primary" style="flex:none;padding:8px 20px" onclick="saveConnModal()" data-i18n="save">保存</button></div>
 </div></div>
 <div class="modal-overlay" id="serviceModal">

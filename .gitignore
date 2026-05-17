@@ -18,6 +18,9 @@ env/
 *.log
 router.log
 
+# 后台运行输出
+cc2go_output.log
+
 # 统计持久化
 stats.json
 
