@@ -22,6 +22,7 @@ from fastapi.responses import StreamingResponse, JSONResponse, HTMLResponse, Pla
 from fastapi.staticfiles import StaticFiles
 from dotenv import load_dotenv
 from streaming import convert_openai_stream_to_anthropic
+from mcp_bypass import should_bypass, handle_bypass, extract_query
 
 load_dotenv()
 
@@ -464,6 +465,14 @@ async def anthropic_messages(request: Request):
 
     try:
         body = await request.json()
+
+        # MCP 工具短路检测
+        bypass, tool_name = should_bypass(body)
+        if bypass:
+            logger.info(f"[Bypass] tool={tool_name}, shortcutting request")
+            query = extract_query(body.get("messages", []))
+            result = await handle_bypass(tool_name, query)
+            return JSONResponse(content=result)
 
         model_name = body.get("model", "glm-5.1")
         # 如果管理员在页面选了模型，覆盖客户端传来的模型名
