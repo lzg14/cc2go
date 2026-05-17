@@ -25,7 +25,6 @@ REQUIRED_FILES = [
 
 
 def clean():
-    """清理旧的构建产物"""
     for d in [DIST_DIR, BUILD_DIR, RELEASE_DIR]:
         if d.exists():
             shutil.rmtree(d)
@@ -41,7 +40,7 @@ def build_exe(name, entry_point, icon=None):
         sys.executable, "-m", "PyInstaller",
         "--name", name,
         "--onefile",
-        "--windowed" if "tray" in name else "--console",
+        "--windowed",
         "--add-data", f"static{os.pathsep}static",
         "--hidden-import", "httpx",
         "--hidden-import", "requests",
@@ -75,19 +74,18 @@ def build_exe(name, entry_point, icon=None):
 
 
 def collect_release():
-    """收集所有文件到 release 目录"""
     RELEASE_DIR.mkdir(exist_ok=True)
 
-    # 复制 exe
-    for exe in ["cc2go.exe", "cc2go-tray.exe"]:
-        src = DIST_DIR / exe
-        if src.exists():
-            shutil.copy2(src, RELEASE_DIR / exe)
-            print(f"已复制: {exe}")
-        else:
-            print(f"警告: {exe} 不存在于 dist/")
+    (RELEASE_DIR / "data").mkdir(exist_ok=True)
+    (RELEASE_DIR / "logs").mkdir(exist_ok=True)
 
-    # 复制其他文件
+    src_exe = DIST_DIR / "cc2go.exe"
+    if src_exe.exists():
+        shutil.copy2(src_exe, RELEASE_DIR / "cc2go.exe")
+        print("已复制: cc2go.exe")
+    else:
+        print("警告: cc2go.exe 不存在于 dist/")
+
     for item in REQUIRED_FILES:
         src = PROJECT_DIR / item
         dst = RELEASE_DIR / item
@@ -102,31 +100,6 @@ def collect_release():
         else:
             print(f"警告: 缺少文件 {item}，发布包可能不完整")
 
-    # 创建快捷批处理
-    (RELEASE_DIR / "start_bg.bat").write_text(
-        '@echo off\ncd /d "%~dp0"\nstart "" cc2go-tray.exe\n',
-        encoding="utf-8"
-    )
-    (RELEASE_DIR / "stop.bat").write_text(
-        '@echo off\r\n'
-        'chcp 65001 > nul\r\n'
-        'cd /d "%~dp0"\r\n'
-        '\r\n'
-        'if exist data\\cc2go.pid (\r\n'
-        '    for /f %%i in (data\\cc2go.pid) do set PID=%%i\r\n'
-        '    taskkill /f /pid %PID% 2>nul\r\n'
-        '    del data\\cc2go.pid 2>nul\r\n'
-        '    echo cc2go stopped.\r\n'
-        ') else (\r\n'
-        '    taskkill /f /im cc2go.exe 2>nul\r\n'
-        '    taskkill /f /im cc2go-tray.exe 2>nul\r\n'
-        '    echo cc2go stopped.\r\n'
-        ')\r\n'
-        'pause\r\n',
-        encoding="utf-8"
-    )
-
-    # 创建使用说明
     readme = f"""# cc2go v{VERSION}
 
 Claude Code → OpenCode Go 适配器
@@ -135,9 +108,9 @@ Claude Code → OpenCode Go 适配器
 
 1. 将本文件夹放到任意位置（建议不要放在 C:\\Program Files）
 2. 复制 `.env.example` 为 `.env`，填入你的 OpenCode Go API Key
-3. 双击 `start_bg.bat` 启动（系统托盘运行，不弹窗口）
-4. 双击托盘图标打开管理页面 `http://localhost:4000`
-5. 在管理页面选择模型即可使用
+3. 双击 `cc2go.exe` 启动（系统托盘运行，自动打开管理页面）
+4. 在管理页面选择模型即可使用
+5. 右键托盘图标 → 退出 停止运行
 
 ## Claude Code 配置
 
@@ -148,16 +121,21 @@ Claude Code → OpenCode Go 适配器
 
 ## 文件说明
 
-| 文件 | 说明 |
-|------|------|
-| `cc2go-tray.exe` | 托盘模式（后台运行，推荐） |
-| `start_bg.bat` | 启动托盘模式 |
-| `stop.bat` | 停止运行 |
+| 文件/目录 | 说明 |
+|-----------|------|
+| `cc2go.exe` | 主程序（系统托盘运行，双击启动） |
 | `.env` | 配置文件（需自行创建） |
+| `data/` | 运行数据（PID 文件、统计、自定义模型配置，自动生成） |
+| `logs/` | 日志目录（自动生成） |
+
+## 如何停止
+
+- 右键系统托盘图标 → 点击「退出」
+- 或任务管理器结束 `cc2go.exe`
 
 ## 常见问题
 
-- **托盘图标不显示**：检查 Windows 通知区域设置，确保 cc2go-tray.exe 未被隐藏
+- **托盘图标不显示**：检查 Windows 通知区域设置，确保 cc2go 未被隐藏
 - **端口被占用**：在 `.env` 中修改 `ROUTER_PORT` 为其他端口
 - **杀毒软件拦截**：PyInstaller 打包的程序可能被误报，请添加信任
 """
@@ -166,7 +144,6 @@ Claude Code → OpenCode Go 适配器
 
 
 def create_zip():
-    """创建发布 ZIP"""
     print(f"\n>>> 创建 {RELEASE_ZIP.name}...")
     with zipfile.ZipFile(RELEASE_ZIP, "w", zipfile.ZIP_DEFLATED) as zf:
         for root, dirs, files in os.walk(RELEASE_DIR):
@@ -184,7 +161,6 @@ def main():
     print(f"cc2go Release Builder v{VERSION}")
     print("=" * 50)
 
-    # 检查依赖
     try:
         import PyInstaller
     except ImportError:
@@ -194,14 +170,10 @@ def main():
 
     clean()
 
-    # 打包两个 exe
-    build_exe("cc2go", "src/router.py")
-    build_exe("cc2go-tray", "src/tray.py", icon="static/favicon.ico")
+    build_exe("cc2go", "src/tray.py", icon="static/favicon.ico")
 
-    # 收集发布文件
     collect_release()
 
-    # 创建 ZIP
     create_zip()
 
     print("\n" + "=" * 50)

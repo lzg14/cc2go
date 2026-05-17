@@ -18,10 +18,18 @@ from PIL import Image, ImageDraw, ImageFont
 
 
 def get_base_dir():
-    """项目根目录，兼容 PyInstaller onefile 打包"""
+    """项目根目录（用户数据目录），兼容 PyInstaller onefile 打包"""
     if getattr(sys, 'frozen', False):
-        return sys._MEIPASS
+        return os.path.dirname(sys.executable)
     return os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+def get_static_dir():
+    """静态资源目录，对于 PyInstaller 优先使用打包内的资源"""
+    if getattr(sys, 'frozen', False):
+        meipass = os.path.join(sys._MEIPASS, "static")
+        if os.path.exists(meipass):
+            return meipass
+    return os.path.join(get_base_dir(), "static")
 
 os.chdir(get_base_dir())
 
@@ -44,7 +52,7 @@ def remove_pid():
 
 
 def load_icon():
-    icon_path = os.path.join(get_base_dir(), "static", "favicon-32x32.png")
+    icon_path = os.path.join(get_static_dir(), "favicon-32x32.png")
     if os.path.exists(icon_path):
         try:
             img = Image.open(icon_path)
@@ -94,9 +102,15 @@ def switch_model(model_name):
     _api_request("PUT", "/api/config", data={"selected_model": model_name}, timeout=5)
 
 
+def get_custom_model_ids():
+    cm = _api_request("GET", "/api/custom-models")
+    return [m["id"] for m in (cm or [])]
+
+
 def build_model_menu():
     """构建模型切换子菜单"""
     models = get_models_list()
+    custom_ids = set(get_custom_model_ids())
 
     def make_callback(name):
         def cb():
@@ -105,9 +119,10 @@ def build_model_menu():
 
     items = []
     for name in sorted(models):
+        label = name + " ★" if name in custom_ids else name
         items.append(
             pystray.MenuItem(
-                name,
+                label,
                 make_callback(name),
                 checked=lambda item, n=name: n == get_current_model(),
             )
@@ -145,16 +160,19 @@ def run_server():
 
 
 _last_models_hash = ""
+_last_selected = ""
 
 
 def refresh_tray_menu(icon):
-    """轮询检测模型列表变化，有变化则重建菜单"""
-    global _last_models_hash
+    """模型列表或选中模型有变化时重建菜单"""
+    global _last_models_hash, _last_selected
     try:
         models = get_models_list()
+        cur = get_current_model()
         h = str(sorted(models))
-        if h != _last_models_hash:
+        if h != _last_models_hash or cur != _last_selected:
             _last_models_hash = h
+            _last_selected = cur
             icon.menu = build_tray_menu()
     except Exception:
         pass
@@ -169,12 +187,25 @@ def menu_watcher(icon):
         refresh_tray_menu(icon)
 
 
+def _auto_open_admin():
+    """延迟 2 秒后自动打开管理页"""
+    time.sleep(2)
+    try:
+        url = f"http://127.0.0.1:{config.router_port}"
+        webbrowser.open(url, new=0)
+    except Exception:
+        pass
+
+
 def main():
     save_pid()
     atexit.register(remove_pid)
 
     t = threading.Thread(target=run_server, daemon=True)
     t.start()
+
+    # 启动后自动打开管理页
+    threading.Thread(target=_auto_open_admin, daemon=True).start()
 
     image = load_icon()
     menu = build_tray_menu()
