@@ -60,8 +60,7 @@ def build_exe(name, entry_point, icon=None):
         "--hidden-import", "uvicorn.protocols.websockets",
         "--hidden-import", "uvicorn.protocols.websockets.auto",
         "--hidden-import", "uvicorn.lifespan",
-        "--hidden-import", "uvicorn.lifespan.auto",
-        "--hidden-import", "python_dotenv",
+        "--hidden-import", "dotenv",
     ]
     if icon:
         cmd.extend(["--icon", str(icon)])
