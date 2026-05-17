@@ -26,6 +26,11 @@ A lightweight proxy that translates [Claude Code](https://claude.ai) (Anthropic 
 
 ### Quick Start
 
+**For non-developers (Windows):**
+Download the latest release from [GitHub Releases](https://github.com/lzg14/cc2go/releases), extract, and run `start_bg.bat`. No Python required.
+
+**For developers:**
+
 ```bash
 pip install -r requirements.txt
 cp .env.example .env   # Edit .env with your API key
@@ -102,6 +107,11 @@ All configuration can be managed via the Web UI (`http://localhost:4000`):
 - 🖥️ **系统托盘** — `start_bg.bat` 托盘静默运行，双击图标打开管理页，右键退出
 
 ### 快速开始
+
+**普通用户（Windows）：**
+从 [GitHub Releases](https://github.com/lzg14/cc2go/releases) 下载最新版，解压后双击 `start_bg.bat` 即可，无需安装 Python。
+
+**开发者：**
 
 ```bash
 pip install -r requirements.txt
