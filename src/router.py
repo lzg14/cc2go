@@ -265,6 +265,7 @@ def convert_anthropic_messages_to_openai(messages: List[Dict]) -> List[Dict]:
             has_image = False
             tool_calls_list = []
             tool_results = []
+            reasoning_content = None
 
             for item in content:
                 if not isinstance(item, dict):
@@ -272,7 +273,11 @@ def convert_anthropic_messages_to_openai(messages: List[Dict]) -> List[Dict]:
 
                 item_type = item.get("type", "")
 
-                if item_type == "text":
+                if item_type == "thinking" and role == "assistant":
+                    text = item.get("thinking", "") or item.get("text", "")
+                    reasoning_content = text
+
+                elif item_type == "text":
                     t = item.get("text", "")
                     t = strip_system_reminder(t)
                     if role == "assistant":
@@ -335,7 +340,7 @@ def convert_anthropic_messages_to_openai(messages: List[Dict]) -> List[Dict]:
             openai_messages.extend(tool_results)
 
             # 合并 content_items 和 tool_calls 到一条消息
-            if content_items or tool_calls_list:
+            if content_items or tool_calls_list or reasoning_content:
                 msg_dict = {"role": role}
                 if content_items:
                     if has_image:
@@ -347,7 +352,12 @@ def convert_anthropic_messages_to_openai(messages: List[Dict]) -> List[Dict]:
                     msg_dict["content"] = None
                 if tool_calls_list:
                     msg_dict["tool_calls"] = tool_calls_list
+                if reasoning_content:
+                    msg_dict["reasoning_content"] = reasoning_content
                 openai_messages.append(msg_dict)
+            elif isinstance(content, list) and not tool_results:
+                # content 数组处理后没有任何产出（如 user 消息仅含 thinking 块），且无 tool_result
+                openai_messages.append({"role": role, "content": ""})
 
         elif content:
             c = strip_system_reminder(content)
@@ -605,12 +615,10 @@ async def anthropic_messages(request: Request):
         if not tools and body.get("output_config", {}).get("format", {}).get("type") == "json_schema":
             del body["output_config"]
 
-        # 清除消息中的 thinking 块（部分上游不接受该字段）
-        body["messages"] = strip_thinking_from_messages(body.get("messages", []))
-
         # 自定义模型透传：仅对 Anthropic 格式端点保留直传，OpenAI 格式走正常转换路径
         if custom_base and custom_ep == "/v1/messages":
             body["model"] = custom_upstream_model
+            body["messages"] = strip_thinking_from_messages(body.get("messages", []))
             full_url = custom_base + custom_ep
             logger.info(f"[Passthrough] model={custom_upstream_model}, url={full_url}")
             response = await call_opencode("", body, api_key=custom_key, full_url=full_url)
