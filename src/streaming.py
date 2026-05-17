@@ -71,10 +71,6 @@ def build_message_stop_event() -> Dict:
     return {"type": "message_stop"}
 
 
-def build_ping_event(index: int) -> Dict:
-    return {"type": "ping", "index": index}
-
-
 def format_sse_event(event: Dict, event_type: str) -> bytes:
     data = json.dumps(event, ensure_ascii=False)
     return f"event: {event_type}\ndata: {data}\n\n".encode("utf-8")

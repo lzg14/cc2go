@@ -28,8 +28,6 @@ def get_static_dir():
             return meipass
     return os.path.join(get_base_dir(), "static")
 
-os.chdir(get_base_dir())
-
 from router import app, config, logger, VERSION
 
 PID_FILE = os.path.join(get_base_dir(), "data", "cc2go.pid")
@@ -108,6 +106,7 @@ def _auto_open_admin():
 
 
 def main():
+    os.chdir(get_base_dir())
     save_pid()
     atexit.register(remove_pid)
 

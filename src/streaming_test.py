@@ -14,7 +14,6 @@ from streaming import (
     build_content_block_stop,
     build_message_delta_event,
     build_message_stop_event,
-    build_ping_event,
     format_sse_event,
 )
 
@@ -68,11 +67,6 @@ class TestEventBuilders(unittest.TestCase):
     def test_build_message_stop_event(self):
         result = build_message_stop_event()
         self.assertEqual(result["type"], "message_stop")
-
-    def test_build_ping_event(self):
-        result = build_ping_event(12345)
-        self.assertEqual(result["type"], "ping")
-        self.assertEqual(result["index"], 12345)
 
     def test_build_content_block_stop(self):
         result = build_content_block_stop(0)

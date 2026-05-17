@@ -156,6 +156,8 @@ update_archive_limiter(config.error_archive_interval)
 def setup_logger():
     from logging.handlers import RotatingFileHandler
     logger = logging.getLogger("llm_router")
+    if logger.handlers:
+        return logger
     logger.setLevel(getattr(logging, config.log_level.upper()))
     file_handler = RotatingFileHandler(config.log_file, encoding="utf-8", maxBytes=5*1024*1024, backupCount=3)
     console_handler = logging.StreamHandler()
@@ -674,7 +676,7 @@ async def anthropic_messages(request: Request):
 
         # 清除 output_config（某些 API 拒绝 empty tools + json_schema）
         if not tools and body.get("output_config", {}).get("format", {}).get("type") == "json_schema":
-            del body["output_config"]
+            body.pop("output_config", None)
 
         # 自定义模型透传：仅对 Anthropic 格式端点保留直传，OpenAI 格式走正常转换路径
         if custom_base and custom_ep == "/v1/messages":
@@ -755,6 +757,7 @@ async def anthropic_messages(request: Request):
             if response.status_code != 200:
                 logger.error(f"[Error] OpenCode API: status={response.status_code}")
                 raise HTTPException(status_code=response.status_code, detail=response.text)
+            increment_requests()
             return StreamingResponse(
                 convert_openai_stream_to_anthropic(response, model_name),
                 media_type="text/event-stream",
@@ -915,8 +918,10 @@ def update_env_file(**kwargs):
         if key not in keys_updated:
             lines.append(f"\n{key}={value}\n")
 
-    with open(env_path, "w", encoding="utf-8") as f:
+    tmp = env_path + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
         f.writelines(lines)
+    os.replace(tmp, env_path)
 
     config.reload()
 
