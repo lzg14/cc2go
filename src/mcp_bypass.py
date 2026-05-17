@@ -6,11 +6,18 @@ MCP 工具短路模块
 import asyncio
 import json
 import logging
+import shutil
 import subprocess
+import sys
 import time
 from typing import Dict, List, Optional, Tuple
 
 logger = logging.getLogger("llm_router")
+
+if sys.platform == "win32":
+    MMX_PATH = shutil.which("mmx") or shutil.which("mmx.cmd") or "mmx"
+else:
+    MMX_PATH = "mmx"
 
 # 可短路的工具及其处理器
 BYPASS_TOOLS = {
@@ -97,7 +104,7 @@ async def handle_mmx_search(tool_name: str, query: str) -> Dict:
 
     try:
         proc = await asyncio.create_subprocess_exec(
-            "mmx", "search", "query", query,
+            MMX_PATH, "search", "query", query,
             "--output", "json",
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE
