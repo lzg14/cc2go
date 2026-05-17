@@ -29,25 +29,33 @@ BYPASS_TOOLS = {
 def should_bypass(body: Dict) -> Tuple[bool, Optional[str]]:
     """
     判断请求是否应短路
+    仅当消息中模型已实际调用了 bypass 工具（tool_use）才触发，
+    不因 tools 参数中有该工具定义就短路。
     Returns: (should_bypass, tool_name)
     """
-    tools = body.get("tools", [])
-    if not tools:
+    messages = body.get("messages", [])
+    if not messages:
         return False, None
 
-    for tool in tools:
-        name = tool.get("name", "") or (tool.get("function", {}) or {}).get("name", "")
-        if not name:
+    # 遍历消息，查找 assistant 消息中的 tool_use 块
+    for msg in reversed(messages):
+        content = msg.get("content", [])
+        if not isinstance(content, list):
             continue
-        # 处理 MCP 格式: mcp__ProviderName__tool_name → 归一化到 base
-        is_mcp_format = name.startswith("mcp__")
-        base_name = name.split("__", 2)[-1] if is_mcp_format else name
-        if base_name in BYPASS_TOOLS:
-            return True, base_name
-        # 完整名称也在配置中时（如 mcp__MiniMax__web_search）
-        if name in BYPASS_TOOLS:
-            return True, base_name
-
+        for block in content:
+            if not isinstance(block, dict):
+                continue
+            if block.get("type") in ("tool_use", "tool_use_block"):
+                name = block.get("name", "")
+                if not name:
+                    continue
+                # MCP 格式: mcp__Provider__tool_name → 归一化到 base
+                if name.startswith("mcp__"):
+                    base = name.split("__", 2)[-1]
+                    if base in BYPASS_TOOLS:
+                        return True, base
+                if name in BYPASS_TOOLS:
+                    return True, name
     return False, None
 
 

@@ -11,58 +11,68 @@ from mcp_bypass import should_bypass, extract_query, BYPASS_TOOLS
 
 
 class TestShouldBypass(unittest.TestCase):
-    def test_should_bypass_websearch(self):
+    def test_should_not_bypass_no_tool_use(self):
+        """仅 tools 参数中有 web_search 定义，没有实际 tool_use → 不短路"""
         body = {
             "model": "qwen3.6-plus",
-            "messages": [{"role": "user", "content": "搜索今天天气"}],
+            "messages": [{"role": "user", "content": "你好"}],
             "tools": [{"name": "web_search", "description": "Web search"}]
+        }
+        result = should_bypass(body)
+        self.assertEqual(result, (False, None))
+
+    def test_should_not_bypass_no_messages(self):
+        body = {
+            "tools": [{"name": "web_search"}]
+        }
+        result = should_bypass(body)
+        self.assertEqual(result, (False, None))
+
+    def test_should_not_bypass_empty_messages(self):
+        body = {
+            "messages": [],
+            "tools": [{"name": "web_search"}]
+        }
+        result = should_bypass(body)
+        self.assertEqual(result, (False, None))
+
+    def test_should_not_bypass_unknown_tool_use(self):
+        body = {
+            "messages": [
+                {"role": "assistant", "content": [{"type": "tool_use", "name": "my_custom_tool", "input": {}}]}
+            ]
+        }
+        result = should_bypass(body)
+        self.assertEqual(result, (False, None))
+
+    def test_should_bypass_tool_use_in_assistant(self):
+        """assistant 消息中有 tool_use: web_search → 短路"""
+        body = {
+            "messages": [
+                {"role": "user", "content": "搜索今天天气"},
+                {"role": "assistant", "content": [{"type": "tool_use", "name": "web_search", "input": {"query": "今天天气"}}]},
+                {"role": "user", "content": [{"type": "tool_result", "tool_use_id": "tu_1", "content": "..."}]}
+            ]
         }
         result = should_bypass(body)
         self.assertEqual(result, (True, "web_search"))
 
-    def test_should_not_bypass_no_tools(self):
+    def test_should_bypass_mcp_prefix_tool_use(self):
+        """mcp__MiniMax__web_search 格式的 tool_use → 短路"""
         body = {
-            "model": "qwen3.6-plus",
-            "messages": [{"role": "user", "content": "你好"}]
-        }
-        result = should_bypass(body)
-        self.assertEqual(result, (False, None))
-
-    def test_should_not_bypass_empty_tools(self):
-        body = {
-            "model": "qwen3.6-plus",
-            "messages": [{"role": "user", "content": "你好"}],
-            "tools": []
-        }
-        result = should_bypass(body)
-        self.assertEqual(result, (False, None))
-
-    def test_should_not_bypass_unknown_tool(self):
-        body = {
-            "model": "qwen3.6-plus",
-            "messages": [{"role": "user", "content": "你好"}],
-            "tools": [{"name": "my_custom_tool"}]
-        }
-        result = should_bypass(body)
-        self.assertEqual(result, (False, None))
-
-    def test_should_bypass_mcp_format(self):
-        body = {
-            "tools": [{"name": "mcp__MiniMax__web_search"}]
+            "messages": [
+                {"role": "assistant", "content": [{"type": "tool_use", "name": "mcp__MiniMax__web_search", "input": {"query": "天气"}}]}
+            ]
         }
         result = should_bypass(body)
         self.assertEqual(result, (True, "web_search"))
 
     def test_should_bypass_function_style(self):
+        """旧版 function 格式（罕见，但兼容）"""
         body = {
-            "tools": [{"function": {"name": "web_search", "description": "Web search"}}]
-        }
-        result = should_bypass(body)
-        self.assertEqual(result, (True, "web_search"))
-
-    def test_should_bypass_mcp_function_style(self):
-        body = {
-            "tools": [{"function": {"name": "mcp__MiniMax__web_search"}}]
+            "messages": [
+                {"role": "assistant", "content": [{"type": "tool_use", "name": "web_search", "input": {}}]}
+            ]
         }
         result = should_bypass(body)
         self.assertEqual(result, (True, "web_search"))
