@@ -46,14 +46,12 @@ for _rd in ("data", "logs"):
     os.makedirs(os.path.join(get_base_dir(), _rd), exist_ok=True)
 
 # 错误现场归档
-ERROR_ARCHIVE_DIR = os.path.join(get_base_dir(), "error-archive")
-
-
 def save_error_archive(timestamp, model, request_body, openai_payload, response_text, status_code):
     """400 错误时自动保存完整上下文到 error-archive/，便于事后复盘"""
-    os.makedirs(ERROR_ARCHIVE_DIR, exist_ok=True)
+    archive_dir = config.error_archive_dir
+    os.makedirs(archive_dir, exist_ok=True)
     safe_ts = timestamp.replace(":", "").replace("/", "-")
-    path = os.path.join(ERROR_ARCHIVE_DIR, f"{safe_ts}-{model}-{status_code}.json")
+    path = os.path.join(archive_dir, f"{safe_ts}-{model}-{status_code}.json")
     try:
         with open(path, "w", encoding="utf-8") as f:
             json.dump({
@@ -67,6 +65,11 @@ def save_error_archive(timestamp, model, request_body, openai_payload, response_
         logger.info(f"[Error Archive] 已保存错误现场: {os.path.basename(path)}")
     except Exception as e:
         logger.warning(f"[Error Archive] 归档失败: {e}")
+
+
+def update_archive_limiter(interval_seconds: int):
+    """更新错误归档限速间隔"""
+    error_archive_limiter.update(max(interval_seconds, 1))
 
 
 VERSION = "0.5.0"
@@ -129,6 +132,11 @@ class Config:
         self.selected_model = os.getenv("SELECTED_MODEL", "")
         self.claude_model_alias = os.getenv("CLAUDE_MODEL_ALIAS", "")
         self.claude_settings_path = os.getenv("CLAUDE_SETTINGS_PATH", os.path.expanduser("~/.claude/settings.json"))
+        _archive_dir = os.getenv("ERROR_ARCHIVE_DIR", os.path.join(get_base_dir(), "error-archive"))
+        if not os.path.isabs(_archive_dir):
+            _archive_dir = os.path.join(get_base_dir(), _archive_dir)
+        self.error_archive_dir = _archive_dir
+        self.error_archive_interval = int(os.getenv("ERROR_ARCHIVE_INTERVAL", "30"))
         self.fallback_models = [
             m.strip() for m in os.getenv("FALLBACK_MODELS", "").split(",")
             if m.strip()
@@ -139,10 +147,12 @@ class Config:
         load_dotenv(override=True)
         self.__init__()
         logger.setLevel(getattr(logging, config.log_level.upper()))
+        update_archive_limiter(config.error_archive_interval)
 
 config = Config()
+update_archive_limiter(config.error_archive_interval)
 
-# ============ 日志 ============
+
 def setup_logger():
     from logging.handlers import RotatingFileHandler
     logger = logging.getLogger("llm_router")
@@ -869,6 +879,8 @@ async def get_config_api():
         "log_level": config.log_level,
         "disable_thinking": config.disable_thinking,
         "detailed_logging": config.detailed_logging,
+        "error_archive_dir": config.error_archive_dir,
+        "error_archive_interval": config.error_archive_interval,
         "selected_model": config.selected_model,
         "claude_model_alias": config.claude_model_alias,
         "models": sorted(config.models.keys()),
@@ -909,6 +921,8 @@ async def update_config_api(updates: dict):
         "log_level": "LOG_LEVEL",
         "disable_thinking": "DISABLE_THINKING",
         "detailed_logging": "DETAILED_LOGGING",
+        "error_archive_dir": "ERROR_ARCHIVE_DIR",
+        "error_archive_interval": "ERROR_ARCHIVE_INTERVAL",
         "selected_model": "SELECTED_MODEL",
         "claude_model_alias": "CLAUDE_MODEL_ALIAS",
     }
@@ -937,6 +951,21 @@ async def update_config_api(updates: dict):
             logger.warning(f"[Config] 同步 Claude Code 配置失败: {e}")
 
     return {"status": "ok", "updated": list(env_updates.keys())}
+
+
+@app.post("/api/open-folder")
+async def open_folder(data: dict = Body(...)):
+    """在资源管理器中打开指定文件夹"""
+    folder_type = data.get("type", "log")
+    if folder_type == "archive":
+        folder = config.error_archive_dir
+    else:
+        folder = config.log_file.rsplit("\\", 1)[0] if "\\" in config.log_file else os.path.dirname(config.log_file)
+    try:
+        os.startfile(folder)
+        return {"status": "ok"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.post("/api/refresh-models")
@@ -1003,9 +1032,9 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','SF Pro Display',sy
 .btn-primary:hover{opacity:.88}
 .btn-secondary{background:#e8e8ed;color:#1d1d1f}
 .btn-secondary:hover{background:#dddde3}
-.modal-overlay{position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.35);z-index:100;display:none;align-items:center;justify-content:center;backdrop-filter:blur(4px)}
+.modal-overlay{position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.35);z-index:100;display:none;align-items:center;justify-content:center;overflow-y:auto;backdrop-filter:blur(4px)}
 .modal-overlay.open{display:flex}
-.modal{background:#fff;border-radius:18px;padding:28px;width:90%;max-width:520px;max-height:90vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,.15);animation:modalIn .2s ease}
+.modal{background:#fff;border-radius:18px;padding:28px;width:90%;max-width:520px;max-height:95vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,.15);animation:modalIn .2s ease}
 @keyframes modalIn{from{opacity:0;transform:scale(.95)}to{opacity:1;transform:scale(1)}}
 .modal h2{font-size:17px;font-weight:600;margin-bottom:18px;letter-spacing:-.2px}
 .modal .form-row{margin-bottom:14px}
@@ -1106,12 +1135,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','SF Pro Display',sy
 
 <div class="modal-overlay" id="advancedModal">
 <div class="modal"><h2 data-i18n="advanced">高级选项</h2>
-<div style="font-size:13px;color:#86868b;margin-bottom:12px" data-i18n="advancedDesc">重试、日志级别、思考模式等高级设置</div>
+<div style="font-size:13px;color:#86868b;margin-bottom:12px" data-i18n="advancedDesc">重试、思考模式等高级设置</div>
 <div class="form-row"><div class="form-group" data-i18n-label="maxRetry"><label>最大重试次数</label><input id="maxRetry2" type="number" min="0" max="10"></div></div>
 <div class="form-row"><div class="form-group" data-i18n-label="retryDelay"><label>重试间隔（秒）</label><input id="retryDelay2" type="number" step="0.5" min="0"></div></div>
-<div class="form-row"><div class="form-group" data-i18n-label="logLevel"><label>日志级别</label><select id="logLevel2"><option>DEBUG</option><option selected>INFO</option><option>WARNING</option><option>ERROR</option></select></div></div>
 <div class="form-row"><div class="checkbox-row"><input id="disableThinking2" type="checkbox"><label for="disableThinking2" data-i18n="disableThinking">禁用思考模式</label></div></div>
-<div class="form-row"><div class="checkbox-row"><input id="detailedLogging2" type="checkbox"><label for="detailedLogging2" data-i18n="detailedLogging">记录详细日志</label></div></div>
 <div class="form-row"><div class="form-group"><label data-i18n="alias">CC 模型名</label><input id="claudeAlias2" data-i18n="aliasPlaceholder" placeholder="留空=使用实际模型名" style="width:100%;padding:8px 12px;border:1px solid #d2d2d7;border-radius:8px;font-size:14px;box-sizing:border-box"></div></div>
 <div style="font-size:12px;color:#86868b;margin-top:-6px" data-i18n="aliasDesc">设成视觉模型名（如 claude-sonnet-4-20250514）可让 CC 放开图片发送</div>
 <div class="modal-actions"><button class="btn btn-secondary" style="flex:none;padding:6px 16px" onclick="closeModal('advancedModal')" data-i18n="cancel">取消</button><button class="btn btn-primary" style="flex:none;padding:6px 16px" onclick="saveAdvancedModal()" data-i18n="save">保存</button></div>
@@ -1135,21 +1162,16 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','SF Pro Display',sy
 </div></div>
 
 <div class="modal-overlay" id="logsModal" onclick="if(event.target===this)closeModal('logsModal')">
-<div class="modal" style="max-width:800px;max-height:90vh"><h2 data-i18n="logs">运行日志</h2>
-<div style="display:flex;gap:12px;margin-bottom:12px;flex-wrap:wrap">
-<div style="flex:1;min-width:140px">
-<label data-i18n="logLevel" style="display:block;font-size:12px;font-weight:500;color:#6e6e73;margin-bottom:4px">日志级别</label>
-<select id="logLevelLogs" onchange="saveLogSettings()" style="width:100%;padding:8px 10px;border:1px solid #d2d2d7;border-radius:8px;font-size:13px;background:#fff;box-sizing:border-box"><option>DEBUG</option><option selected>INFO</option><option>WARNING</option><option>ERROR</option></select>
+<div class="modal" style="max-width:520px;max-height:95vh"><h2 data-i18n="logs">运行日志</h2>
+<div class="form-row"><div class="form-group" data-i18n-label="logLevel"><label>日志级别</label><select id="logLevelLogs" onchange="saveLogSettings()"><option>DEBUG</option><option selected>INFO</option><option>WARNING</option><option>ERROR</option></select></div></div>
+<div class="form-row"><div class="checkbox-row"><input id="detailedLoggingLogs" type="checkbox" onchange="saveLogSettings()"><label for="detailedLoggingLogs" data-i18n="detailedLogging">记录详细日志</label></div></div>
+<div style="margin:12px 0;border-top:1px solid #e8e8ed"></div>
+<div class="form-row"><div class="form-group" data-i18n-label="archiveDir"><label>错误归档目录</label><input id="archiveDir" type="text" style="width:100%;padding:8px 12px;border:1px solid #d2d2d7;border-radius:8px;font-size:13px;box-sizing:border-box"><div style="font-size:11px;color:#86868b;margin-top:2px"><span data-i18n="archiveDirDesc">留空使用默认位置</span></div></div></div>
+<div class="form-row"><div class="form-group" data-i18n-label="archiveInterval"><label>归档间隔（秒）</label><input id="archiveInterval" type="number" min="1" max="3600" style="width:100%;padding:8px 12px;border:1px solid #d2d2d7;border-radius:8px;font-size:13px;box-sizing:border-box"><div style="font-size:11px;color:#86868b;margin-top:2px"><span data-i18n="archiveIntervalDesc">同类型错误至少间隔指定秒数才再次归档</span></div></div></div>
+<div style="display:flex;gap:8px;margin-top:4px;flex-wrap:wrap">
+<button class="btn btn-secondary" style="padding:6px 14px;font-size:12px;flex:none" onclick="openFolder('log')" data-i18n="openLogFolder">打开日志文件夹</button>
+<button class="btn btn-secondary" style="padding:6px 14px;font-size:12px;flex:none" onclick="openFolder('archive')" data-i18n="openArchiveFolder">打开错误归档文件夹</button>
 </div>
-<div style="display:flex;align-items:flex-end;gap:12px;padding-bottom:4px">
-<div class="checkbox-row"><input id="detailedLoggingLogs" type="checkbox" onchange="saveLogSettings()"><label for="detailedLoggingLogs" data-i18n="detailedLogging">记录详细日志</label></div>
-</div>
-</div>
-<div style="display:flex;gap:8px;margin-bottom:8px">
-<button class="btn btn-secondary" style="padding:4px 12px;font-size:12px;flex:none" onclick="loadLogs()" data-i18n="refresh">刷新</button>
-<label style="font-size:12px;color:#6e6e73;display:flex;align-items:center;gap:4px;cursor:pointer"><input type="checkbox" id="autoRefresh2" checked onchange="toggleAutoRefresh()" style="width:auto"><span data-i18n="autorefresh">自动刷新</span></label>
-</div>
-<pre id="logViewer2" style="background:#f0f0f5;border-radius:8px;padding:12px;font-size:12px;line-height:1.5;overflow-x:auto;max-height:60vh;overflow-y:auto;white-space:pre;margin:0;color:#1d1d1f;font-family:SFMono-Regular,Consolas,'Liberation Mono',monospace">加载中...</pre>
 </div></div>
 
 <div class="toast" id="toast"></div>
@@ -1191,11 +1213,15 @@ const I18N = {
     switched: "已切换到",
     reloaded: "已重新加载",
     reloadfail: "重载失败",
-    logempty: "(空日志)",
-    logfail: "加载失败",
+    archiveDir: "错误归档目录",
+    archiveDirDesc: "留空使用默认位置",
+    archiveInterval: "归档间隔（秒）",
+    archiveIntervalDesc: "同类型错误至少间隔指定秒数才再次归档",
+    openLogFolder: "打开日志文件夹",
+    openArchiveFolder: "打开错误归档文件夹",
+    openfail: "打开失败",
     aliasDesc: "留空显示实际模型名。设成视觉模型名（如 claude-sonnet-4-20250514）可让 CC 放开图片发送",
     aliasPlaceholder: "留空=使用实际模型名",
-    autorefresh: "自动刷新",
     customModels: "自定义模型",
     add: "添加",
     noCustomModels: "暂无自定义模型",
@@ -1213,7 +1239,7 @@ const I18N = {
     errors: "错误",
     errRate: "错误率",
     serviceDesc: "修改后自动同步到 Claude Code 的连接配置",
-    advancedDesc: "重试、日志、思考模式等高级设置",
+    advancedDesc: "重试、思考模式等高级设置",
     maxRetry: "最大重试次数",
     retryDelay: "重试间隔（秒）",
     logLevel: "日志级别",
@@ -1247,11 +1273,15 @@ const I18N = {
     switched: "Switched to",
     reloaded: "Reloaded",
     reloadfail: "Reload failed",
-    logempty: "(empty log)",
-    logfail: "Load failed",
+    archiveDir: "Error Archive Dir",
+    archiveDirDesc: "Leave empty for default location",
+    archiveInterval: "Archive Interval (s)",
+    archiveIntervalDesc: "Minimum seconds between archives of same error type",
+    openLogFolder: "Open Log Folder",
+    openArchiveFolder: "Open Archive Folder",
+    openfail: "Failed to open",
     aliasDesc: "Leave empty to show actual model name. Set to a vision model name (e.g. claude-sonnet-4-20250514) to enable image input in CC.",
     aliasPlaceholder: "Leave empty = use actual model",
-    autorefresh: "Auto refresh",
     customModels: "Custom Models",
     add: "Add",
     noCustomModels: "No custom models",
@@ -1269,7 +1299,7 @@ const I18N = {
     errors: "Errors",
     errRate: "Error rate",
     serviceDesc: "Changes sync to Claude Code automatically",
-    advancedDesc: "Retry, logging, thinking mode, etc.",
+    advancedDesc: "Retry, thinking mode, etc.",
     maxRetry: "Max retries",
     retryDelay: "Retry delay (s)",
     logLevel: "Log level",
@@ -1430,11 +1460,10 @@ async function fetchModels() {
 }
 function openModal(id) {
   document.getElementById(id).classList.add('open');
-  if (id === 'logsModal') { loadLogs(); toggleAutoRefresh(); }
+  document.getElementById(id).classList.add('open');
 }
 function closeModal(id) {
   document.getElementById(id).classList.remove('open');
-  if (id === 'logsModal') { if (logTimer) { clearInterval(logTimer); logTimer = null; } }
 }
 function syncToModals(cfg) {
   setVal('host2', cfg.router_host);
@@ -1442,12 +1471,12 @@ function syncToModals(cfg) {
   setVal('masterKey2', cfg.master_key);
   setVal('maxRetry2', cfg.max_retry);
   setVal('retryDelay2', cfg.retry_delay);
-  setVal('logLevel2', cfg.log_level);
   setChecked('disableThinking2', cfg.disable_thinking);
-  setChecked('detailedLogging2', cfg.detailed_logging);
   setVal('claudeAlias2', cfg.claude_model_alias);
   setVal('logLevelLogs', cfg.log_level);
   setChecked('detailedLoggingLogs', cfg.detailed_logging);
+  setVal('archiveDir', cfg.error_archive_dir||'');
+  setVal('archiveInterval', cfg.error_archive_interval||30);
 }
 function setVal(id, v) { const el = document.getElementById(id); if (el) el.value = v||''; }
 function setChecked(id, v) { const el = document.getElementById(id); if (el) el.checked = v!==false; }
@@ -1456,7 +1485,10 @@ function getChecked(id) { const el = document.getElementById(id); return el ? el
 function saveServiceModal() { closeModal('serviceModal'); save(); }
 function saveAdvancedModal() { closeModal('advancedModal'); save(); }
 function saveAliasModal() { closeModal('aliasModal'); save(); }
-function saveLogSettings() { save(['log_level','detailed_logging']); }
+function saveLogSettings() { save(['log_level','detailed_logging','error_archive_dir','error_archive_interval']); }
+function openFolder(type) {
+  api('POST','/api/open-folder',{type}).catch(e => toast(t('openfail')+': '+e.message, false));
+}
 async function save(keys) {
   const body = {};
   if (!keys) {
@@ -1474,6 +1506,8 @@ async function save(keys) {
   } else {
     if (keys.includes('log_level')) body.log_level = getVal('logLevelLogs')||'INFO';
     if (keys.includes('detailed_logging')) body.detailed_logging = getChecked('detailedLoggingLogs');
+    if (keys.includes('error_archive_dir')) body.error_archive_dir = getVal('archiveDir');
+    if (keys.includes('error_archive_interval')) body.error_archive_interval = parseInt(getVal('archiveInterval'))||30;
   }
   try {
     const r = await api('PUT','/api/config', body);
@@ -1516,13 +1550,6 @@ function saveCustomModal() {
     load();
     toast(t('saved'));
   }).catch(e => toast(t('savefail')+': '+e.message, false));
-}
-let logTimer = null;
-function toggleAutoRefresh() {
-  if (logTimer) { clearInterval(logTimer); logTimer = null; }
-  if (document.getElementById('autoRefresh2') && document.getElementById('autoRefresh2').checked) {
-    logTimer = setInterval(loadLogs, 5000);
-  }
 }
 function editCustomModelByid(id) {
   const i = customModels.findIndex(m => m.id === id);
@@ -1572,18 +1599,6 @@ function deleteSelectedCustom() {
     load();
     toast(t('customDeleted'));
   });
-}
-async function loadLogs() {
-  try {
-    const r = await api('GET','/api/logs?limit=100');
-    const v = document.getElementById('logViewer2');
-    if (!v) return;
-    v.textContent = r.lines.join('')||t('logempty');
-    v.scrollTop = v.scrollHeight;
-  } catch(e) {
-    const v = document.getElementById('logViewer2');
-    if (v) v.textContent = t('logfail')+': '+e.message;
-  }
 }
 async function reload() {
   try {
