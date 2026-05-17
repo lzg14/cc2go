@@ -4,13 +4,10 @@ cc2go 系统托盘 - 后台静默运行，托盘图标管理
 
 import os
 import sys
-import json
 import time
 import atexit
 import threading
 import webbrowser
-import urllib.request
-import urllib.error
 
 import uvicorn
 import pystray
@@ -33,7 +30,7 @@ def get_static_dir():
 
 os.chdir(get_base_dir())
 
-from router import app, config, logger, VERSION, model_change_signal
+from router import app, config, logger, VERSION
 
 PID_FILE = os.path.join(get_base_dir(), "data", "cc2go.pid")
 
@@ -75,70 +72,9 @@ def open_admin():
     webbrowser.open(url, new=0)
 
 
-def _api_request(method, path, data=None, timeout=3):
-    """简单的同步 HTTP 请求（标准库 urllib，无外部依赖）"""
-    url = f"http://127.0.0.1:{config.router_port}{path}"
-    headers = {"Content-Type": "application/json"} if data else {}
-    body = json.dumps(data).encode("utf-8") if data else None
-    req = urllib.request.Request(url, data=body, headers=headers, method=method)
-    try:
-        with urllib.request.urlopen(req, timeout=timeout) as resp:
-            return json.loads(resp.read().decode("utf-8"))
-    except (urllib.error.URLError, urllib.error.HTTPError):
-        return None
-
-
-def get_current_model():
-    cfg = _api_request("GET", "/api/config")
-    return cfg.get("selected_model", "") if cfg else ""
-
-
-def get_models_list():
-    cfg = _api_request("GET", "/api/config")
-    return cfg.get("models", []) if cfg else []
-
-
-def switch_model(model_name):
-    _api_request("PUT", "/api/config", data={"selected_model": model_name}, timeout=5)
-
-
-def get_custom_models_map():
-    """返回 {id: display_name} 字典"""
-    cm = _api_request("GET", "/api/custom-models")
-    return {m["id"]: (m.get("display_name") or m["id"]) for m in (cm or [])}
-
-
-def build_model_menu():
-    """构建模型切换子菜单"""
-    models = get_models_list()
-    custom_map = get_custom_models_map()
-
-    def make_callback(name):
-        def cb():
-            switch_model(name)
-        return cb
-
-    items = []
-    for name in sorted(models):
-        dn = custom_map.get(name)
-        label = (dn + " ★") if dn else name
-        items.append(
-            pystray.MenuItem(
-                label,
-                make_callback(name),
-                checked=lambda item, n=name: n == get_current_model(),
-            )
-        )
-    return items
-
-
 def build_tray_menu():
-    """构建完整托盘菜单"""
-    model_items = build_model_menu()
-
+    """构建托盘菜单（仅保留管理页入口和退出）"""
     return pystray.Menu(
-        pystray.MenuItem("切换模型", pystray.Menu(*model_items)),
-        pystray.Menu.SEPARATOR,
         pystray.MenuItem("打开管理页", lambda: open_admin(), default=True),
         pystray.Menu.SEPARATOR,
         pystray.MenuItem("退出", quit_app),
@@ -159,34 +95,6 @@ def run_server():
     except Exception as e:
         logger.error(f"Server error: {e}")
         os._exit(1)
-
-
-_last_models_hash = ""
-_last_selected = ""
-
-
-def refresh_tray_menu(icon):
-    """模型列表或选中模型有变化时重建菜单"""
-    global _last_models_hash, _last_selected
-    try:
-        models = get_models_list()
-        cur = get_current_model()
-        h = str(sorted(models))
-        if h != _last_models_hash or cur != _last_selected:
-            _last_models_hash = h
-            _last_selected = cur
-            icon.menu = build_tray_menu()
-    except Exception:
-        pass
-
-
-def menu_watcher(icon):
-    """后台线程：等待模型变化信号，信号到来时刷新菜单"""
-    while True:
-        model_change_signal.wait()    # 阻塞直到有信号
-        model_change_signal.clear()
-        time.sleep(0.5)              # 等 API 稳定
-        refresh_tray_menu(icon)
 
 
 def _auto_open_admin():
@@ -213,11 +121,6 @@ def main():
     menu = build_tray_menu()
 
     icon = pystray.Icon("cc2go", image, f"cc2go v{VERSION}", menu)
-
-    # 模型变化即刷新托盘菜单（事件驱动，无轮询）
-    watcher = threading.Thread(target=menu_watcher, args=(icon,), daemon=True)
-    watcher.start()
-
     icon.run()
 
 

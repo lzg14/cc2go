@@ -213,9 +213,6 @@ stats = load_stats()
 request_count = stats["requests"]
 error_count = stats["errors"]
 
-# 系统托盘菜单刷新信号
-model_change_signal = threading.Event()
-
 
 def strip_system_reminder(text: str) -> str:
     """移除用户消息中的 <system-reminder> 块（Claude Code 注入的技能提示），防止触发上游内容过滤"""
@@ -618,7 +615,6 @@ async def anthropic_messages(request: Request):
         # 自定义模型透传：仅对 Anthropic 格式端点保留直传，OpenAI 格式走正常转换路径
         if custom_base and custom_ep == "/v1/messages":
             body["model"] = custom_upstream_model
-            body["messages"] = strip_thinking_from_messages(body.get("messages", []))
             full_url = custom_base + custom_ep
             logger.info(f"[Passthrough] model={custom_upstream_model}, url={full_url}")
             response = await call_opencode("", body, api_key=custom_key, full_url=full_url)
@@ -641,6 +637,7 @@ async def anthropic_messages(request: Request):
         # MiniMax 用 /v1/messages 端点
         if endpoint == "/v1/messages":
             body["thinking"] = {"type": "disabled"}
+            body["messages"] = strip_thinking_from_messages(body.get("messages", []))
             if config.detailed_logging:
                 logger.debug(f"[MiniMax Payload] {json.dumps(body, ensure_ascii=False)[:1000]}")
             logger.debug(f"[Payload] Direct forward to {endpoint} with thinking disabled")
@@ -1421,7 +1418,6 @@ async function load() {
     const dot = document.getElementById('statusDot');
     dot.className = 'status-dot ok';
     document.getElementById('statusText').textContent = t('running');
-    _lastModel = cfg.selected_model || '';
     toast(t('loaded'));
   } catch(e) {
     const dot = document.getElementById('statusDot');
@@ -1662,25 +1658,6 @@ async function reload() {
 applyLang();
 (async () => { await loadCustomModels(); await load(); })();
 
-let _lastModel = '';
-let _pollTimer = null;
-async function autoRefresh() {
-  try {
-    const cfg = await api('GET','/api/config');
-    if (cfg.selected_model !== _lastModel) {
-      _lastModel = cfg.selected_model || '';
-      await load();  // load() 已包含模型列表渲染
-    }
-  } catch(e) {}
-}
-function startPolling() {
-  if (_pollTimer) clearInterval(_pollTimer);
-  _pollTimer = setInterval(autoRefresh, 10000);
-}
-setTimeout(startPolling, 5000);
-window.addEventListener('beforeunload', () => {
-  if (_pollTimer) clearInterval(_pollTimer);
-});
 </script>
 </body>
 </html>"""
@@ -1707,7 +1684,6 @@ def refresh_models():
                         new_models[mid] = {"id": mid, "endpoint": ep}
                     custom = load_custom_models()
                     config.models = merge_models(new_models, custom)
-                    model_change_signal.set()
                     with open(cache_file, "w") as f:
                         json.dump(ids, f)
                     logger.info(f"[Models] 从上游加载 {len(new_models)} 个模型 + {len(custom)} 个自定义")
@@ -1724,14 +1700,12 @@ def refresh_models():
                     ep = "/v1/messages" if mid.startswith("minimax") else "/v1/chat/completions"
                     cached[mid] = {"id": mid, "endpoint": ep}
                 config.models = merge_models(cached, load_custom_models())
-                model_change_signal.set()
                 logger.info(f"[Models] 从缓存加载 {len(cached)} 个模型")
                 return
     except Exception:
         pass
     # 最终兜底：默认列表
     config.models = merge_models(DEFAULT_MODELS, load_custom_models())
-    model_change_signal.set()
 
 if __name__ == "__main__":
     refresh_models()
