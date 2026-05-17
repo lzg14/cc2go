@@ -119,11 +119,11 @@ async def handle_mmx_search(tool_name: str, query: str) -> Dict:
                     snippet_short = snippet[:100] + "..." if len(snippet) > 100 else snippet
                     lines.append(f"{i+1}. {title}\n   {link}")
                     if snippet_short:
-                        lines.append(f"   💬 {snippet_short}")
+                        lines.append(f"   {snippet_short}")
                 if not lines:
-                    result["content"] = [{"type": "text", "text": f"搜索「{query}」无结果"}]
+                    result["content"] = [{"type": "text", "text": f"搜索 [{query}] 无结果"}]
                 else:
-                    result["content"] = [{"type": "text", "text": f"🔍 搜索「{query}」:\n\n" + "\n\n".join(lines)}]
+                    result["content"] = [{"type": "text", "text": f"搜索 [{query}]:\n\n" + "\n\n".join(lines)}]
             except json.JSONDecodeError:
                 result["content"] = [{"type": "text", "text": output[:2000]}]
     except Exception as e:

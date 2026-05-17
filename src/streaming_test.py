@@ -11,6 +11,7 @@ from streaming import (
     build_message_start_event,
     build_content_block_start,
     build_content_block_delta,
+    build_content_block_stop,
     build_message_delta_event,
     build_message_stop_event,
     build_ping_event,
@@ -78,6 +79,11 @@ class TestEventBuilders(unittest.TestCase):
         self.assertEqual(result["type"], "ping")
         self.assertEqual(result["index"], 12345)
 
+    def test_build_content_block_stop(self):
+        result = build_content_block_stop(0)
+        self.assertEqual(result["type"], "content_block_stop")
+        self.assertEqual(result["index"], 0)
+
 
 class TestSSEFormatting(unittest.TestCase):
     def test_format_sse_event(self):
@@ -105,25 +111,18 @@ class TestEventSequence(unittest.TestCase):
         events.append(format_sse_event(build_message_start_event(msg_id, model), "message_start"))
         events.append(format_sse_event(build_content_block_start(0, "text"), "content_block_start"))
         events.append(format_sse_event(build_content_block_delta(0, "text", "Hello"), "content_block_delta"))
-        events.append(format_sse_event(build_content_block_delta(0, "text", " world"), "content_block_delta"))
+        events.append(format_sse_event(build_content_block_stop(0), "content_block_stop"))
         events.append(format_sse_event(build_message_delta_event(msg_id, "end_turn"), "message_delta"))
         events.append(format_sse_event(build_message_stop_event(), "message_stop"))
 
         self.assertEqual(len(events), 6)
-
-        # 验证首个事件包含 message_start
         self.assertIn(b"event: message_start", events[0])
         self.assertIn(b"msg-123", events[0])
-
-        # 验证 content_block_start
         self.assertIn(b"event: content_block_start", events[1])
         self.assertIn(b'"type": "text"', events[1])
-
-        # 验证增量事件
         self.assertIn(b"event: content_block_delta", events[2])
         self.assertIn(b"Hello", events[2])
-
-        # 验证最后一个事件是 message_stop
+        self.assertIn(b"event: content_block_stop", events[3])
         self.assertIn(b"event: message_stop", events[-1])
 
     def test_tool_use_event_sequence(self):
@@ -133,21 +132,15 @@ class TestEventSequence(unittest.TestCase):
         events.append(format_sse_event(build_content_block_delta(0, "tool_use_id", "tc_001"), "content_block_delta"))
         events.append(format_sse_event(build_content_block_delta(0, "tool_use_name", "web_search"), "content_block_delta"))
         events.append(format_sse_event(build_content_block_delta(0, "tool_use_input", '{"query":"weather"}'), "content_block_delta"))
+        events.append(format_sse_event(build_content_block_stop(0), "content_block_stop"))
 
-        self.assertEqual(len(events), 4)
-
-        # 验证 tool_use 块
+        self.assertEqual(len(events), 5)
         self.assertIn(b"event: content_block_start", events[0])
         self.assertIn(b"tool_use", events[0])
-
-        # 验证 id
         self.assertIn(b"tc_001", events[1])
-
-        # 验证 name
         self.assertIn(b"web_search", events[2])
-
-        # 验证 input
         self.assertIn(b"weather", events[3])
+        self.assertIn(b"event: content_block_stop", events[4])
 
 
 if __name__ == "__main__":

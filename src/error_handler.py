@@ -7,6 +7,7 @@ import asyncio
 import json
 import logging
 import random
+import threading
 import time
 from enum import Enum
 from typing import Dict, List, Optional, Tuple
@@ -125,26 +126,29 @@ def classify_and_suggest_action(
 
 # ============ 归档限速 ============
 class ErrorArchiveRateLimiter:
-    """错误归档限速：同一种错误 5 分钟内最多归档 N 次"""
+    """错误归档限速：5 分钟内最多归档 N 次"""
 
     def __init__(self, window_seconds: float = 300.0, max_per_window: int = 10):
         self.window = window_seconds
         self.max_per_window = max_per_window
         self._timestamps: List[float] = []
+        self._lock = threading.Lock()
 
     def can_archive(self) -> bool:
-        """判断是否未超限"""
-        now = time.time()
-        self._timestamps = [ts for ts in self._timestamps if now - ts < self.window]
-        return len(self._timestamps) < self.max_per_window
+        with self._lock:
+            now = time.time()
+            self._timestamps = [ts for ts in self._timestamps if now - ts < self.window]
+            return len(self._timestamps) < self.max_per_window
 
     def archive(self) -> bool:
-        """记录一次归档请求，返回是否成功"""
-        if self.can_archive():
-            self._timestamps.append(time.time())
-            return True
-        logger.debug("[ArchiveRateLimit] 限速跳过归档")
-        return False
+        now = time.time()
+        with self._lock:
+            self._timestamps = [ts for ts in self._timestamps if now - ts < self.window]
+            if len(self._timestamps) < self.max_per_window:
+                self._timestamps.append(time.time())
+                return True
+            logger.debug("[ArchiveRateLimit] 限速跳过归档")
+            return False
 
 
 # 模块级限速器

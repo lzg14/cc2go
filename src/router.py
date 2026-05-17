@@ -558,26 +558,23 @@ async def anthropic_messages(request: Request):
         custom_full = None
         for cm in load_custom_models():
             if cm["id"] == model_name:
-                if cm.get("base_url"):
-                    custom_base = cm["base_url"]
-                elif cm.get("url"):  # 兼容旧格式
-                    base = cm["url"].rstrip("/")
-                    custom_full = base + (cm.get("endpoint", "") or "/v1/chat/completions")
-                if cm.get("endpoint"):
-                    custom_ep = cm["endpoint"]
-                if cm.get("api_key"):
-                    custom_key = cm["api_key"]
+                raw_base = cm.get("base_url") or cm.get("url") or ""
+                if raw_base:
+                    custom_base = raw_base.rstrip("/")
+                    custom_ep = cm.get("endpoint", "")
+                    if cm.get("api_key"):
+                        custom_key = cm["api_key"]
                 break
 
         # 自定义模型直接透传，不做格式转换
-        if custom_base or custom_full:
-            full_url = custom_full or (custom_base + (custom_ep or "/v1/chat/completions"))
+        if custom_base:
+            full_url = custom_base + custom_ep if custom_ep else custom_base
             logger.info(f"[Passthrough] model={model_name}, url={full_url}")
             response = await call_opencode("", body, api_key=custom_key, full_url=full_url)
             raw_text = response.text
             if response.status_code != 200:
                 logger.error(f"[Passthrough] {model_name} status={response.status_code}: {raw_text[:500]}")
-                if response.status_code == 400:
+                if response.status_code >= 400 and error_archive_limiter.archive():
                     save_error_archive(
                         datetime.now().isoformat(), model_name, body, None, raw_text, response.status_code
                     )
@@ -604,7 +601,7 @@ async def anthropic_messages(request: Request):
             if response.status_code != 200:
                 error_detail = response.text
                 logger.error(f"[Error] OpenCode API status={response.status_code}: {error_detail[:500]}")
-                if response.status_code == 400:
+                if response.status_code >= 400 and error_archive_limiter.archive():
                     save_error_archive(
                         datetime.now().isoformat(), model_name, body, None, error_detail, response.status_code
                     )
@@ -677,7 +674,7 @@ async def anthropic_messages(request: Request):
 
         if response.status_code != 200:
             logger.error(f"[Error] OpenCode API: status={response.status_code}, body={raw_text[:2000]}")
-            if response.status_code == 400:
+            if response.status_code >= 400 and error_archive_limiter.archive():
                 save_error_archive(
                     datetime.now().isoformat(), model_name, body, openai_payload, raw_text, response.status_code
                 )

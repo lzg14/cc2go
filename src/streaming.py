@@ -9,7 +9,6 @@ from typing import AsyncGenerator, Dict
 
 
 def build_message_start_event(msg_id: str, model: str) -> Dict:
-    """构建 message_start 事件"""
     return {
         "type": "message_start",
         "message": {
@@ -26,7 +25,6 @@ def build_message_start_event(msg_id: str, model: str) -> Dict:
 
 
 def build_content_block_start(index: int, block_type: str = "text") -> Dict:
-    """构建 content_block_start 事件"""
     content_block = {"type": block_type}
     if block_type == "text":
         content_block["text"] = ""
@@ -42,7 +40,6 @@ def build_content_block_start(index: int, block_type: str = "text") -> Dict:
 
 
 def build_content_block_delta(index: int, delta_type: str, content: str) -> Dict:
-    """构建 content_block_delta 事件"""
     delta = {}
     if delta_type == "text":
         delta["text"] = content
@@ -59,8 +56,11 @@ def build_content_block_delta(index: int, delta_type: str, content: str) -> Dict
     }
 
 
+def build_content_block_stop(index: int) -> Dict:
+    return {"type": "content_block_stop", "index": index}
+
+
 def build_message_delta_event(msg_id: str, stop_reason: str = "end_turn", usage: Dict = None) -> Dict:
-    """构建 message_delta 事件"""
     return {
         "type": "message_delta",
         "index": 0,
@@ -71,17 +71,14 @@ def build_message_delta_event(msg_id: str, stop_reason: str = "end_turn", usage:
 
 
 def build_message_stop_event() -> Dict:
-    """构建 message_stop 事件"""
     return {"type": "message_stop"}
 
 
 def build_ping_event(index: int) -> Dict:
-    """构建 ping 事件"""
     return {"type": "ping", "index": index}
 
 
 def format_sse_event(event: Dict, event_type: str) -> bytes:
-    """将事件字典格式化为 SSE 格式的 bytes"""
     data = json.dumps(event, ensure_ascii=False)
     return f"event: {event_type}\ndata: {data}\n\n".encode("utf-8")
 
@@ -90,25 +87,20 @@ async def convert_openai_stream_to_anthropic(
     response,
     model: str
 ) -> AsyncGenerator[bytes, None]:
-    """
-    将 OpenAI 流式响应转换为 Anthropic SSE 格式
-    逐行解析 OpenAI chunk，转换为 Anthropic 事件
-    """
     msg_id = f"msg_{uuid.uuid4().hex[:24]}"
-    content_index = 0
-    tool_index = 0
+    block_index = 0
     has_sent_message_start = False
+    current_block_type = None
 
     async for line in response.aiter_lines():
         line = line.strip()
-        if not line:
-            continue
-
-        if not line.startswith("data: "):
+        if not line or not line.startswith("data: "):
             continue
 
         data_str = line[6:]
         if data_str in ("[DONE]", ""):
+            if current_block_type is not None:
+                yield format_sse_event(build_content_block_stop(block_index), "content_block_stop")
             yield format_sse_event(build_message_stop_event(), "message_stop")
             continue
 
@@ -128,49 +120,58 @@ async def convert_openai_stream_to_anthropic(
         if not has_sent_message_start:
             has_sent_message_start = True
             yield format_sse_event(build_message_start_event(msg_id, model), "message_start")
-            yield format_sse_event(build_content_block_start(content_index, "text"), "content_block_start")
 
         content = delta.get("content", "")
+        tool_calls = delta.get("tool_calls", [])
+
         if content:
+            if current_block_type != "text":
+                if current_block_type is not None:
+                    yield format_sse_event(build_content_block_stop(block_index), "content_block_stop")
+                    block_index += 1
+                current_block_type = "text"
+                yield format_sse_event(
+                    build_content_block_start(block_index, "text"), "content_block_start"
+                )
             yield format_sse_event(
-                build_content_block_delta(content_index, "text", content),
+                build_content_block_delta(block_index, "text", content),
                 "content_block_delta"
             )
 
-        tool_calls = delta.get("tool_calls", [])
         for tc in tool_calls:
-            func = tc.get("function", {})
             tc_id = tc.get("id", "")
+            tc_index = tc.get("index", 0)
+            func = tc.get("function", {})
             tc_name = func.get("name", "")
             tc_input = func.get("arguments", "")
 
             if tc_id and tc_name:
+                if current_block_type is not None:
+                    yield format_sse_event(build_content_block_stop(block_index), "content_block_stop")
+                    block_index += 1
+                current_block_type = "tool_use"
                 yield format_sse_event(
-                    build_content_block_start(tool_index, "tool_use"),
+                    build_content_block_start(block_index, "tool_use"),
                     "content_block_start"
                 )
                 yield format_sse_event(
-                    build_content_block_delta(tool_index, "tool_use_id", tc_id),
+                    build_content_block_delta(block_index, "tool_use_id", tc_id),
                     "content_block_delta"
                 )
                 yield format_sse_event(
-                    build_content_block_delta(tool_index, "tool_use_name", tc_name),
+                    build_content_block_delta(block_index, "tool_use_name", tc_name),
                     "content_block_delta"
                 )
 
             if tc_input:
-                try:
-                    parsed = json.loads(tc_input) if isinstance(tc_input, str) else tc_input
-                    input_str = json.dumps(parsed, ensure_ascii=False)
-                except json.JSONDecodeError:
-                    input_str = str(tc_input)
                 yield format_sse_event(
-                    build_content_block_delta(tool_index, "tool_use_input", input_str),
+                    build_content_block_delta(block_index, "tool_use_input", tc_input),
                     "content_block_delta"
                 )
-                tool_index += 1
 
         if finish_reason in ("stop", "length"):
+            if current_block_type is not None:
+                yield format_sse_event(build_content_block_stop(block_index), "content_block_stop")
             stop_reason = "end_turn" if finish_reason == "stop" else "max_tokens"
             usage = chunk.get("usage", {})
             yield format_sse_event(
