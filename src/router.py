@@ -1160,6 +1160,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','SF Pro Display',sy
 
 <div class="btn-row" style="margin-bottom:6px">
 <button class="btn btn-secondary" onclick="clearCustomModalFields();openModal('customModal')">➕ <span data-i18n="addModel">新增模型</span></button>
+<button class="btn btn-secondary" onclick="editSelectedCustom()">✎ <span data-i18n="editModel">编辑模型</span></button>
 <button class="btn btn-secondary" onclick="fetchModels()">🔄 <span data-i18n="refreshModels">刷新模型</span></button>
 </div>
 <div class="btn-row">
@@ -1446,9 +1447,8 @@ async function load() {
       } else {
         cEl.innerHTML = customModels.map(m => {
           const label = m.display_name || m.id;
-          return '<span class="model-tag'+(m.id===sel?' selected':'')+' custom" data-model="'+m.id+'" onclick="selectModel(\''+m.id+'\')" style="position:relative;padding-right:36px">' +
+          return '<span class="model-tag'+(m.id===sel?' selected':'')+' custom" data-model="'+m.id+'" onclick="selectModel(\''+m.id+'\')" style="position:relative;padding-right:18px">' +
             label+' <sup style="font-size:10px;opacity:.7">C</sup>' +
-            '<span onclick="event.stopPropagation();editCustomModelById(\''+m.id+'\')" style="cursor:pointer;color:#0071e3;font-size:12px;position:absolute;top:2px;right:18px" title="Edit">✎</span>' +
             '<span onclick="event.stopPropagation();deleteCustomModelById(\''+m.id+'\')" style="cursor:pointer;color:#ff3b30;font-size:12px;position:absolute;top:2px;right:3px" title="Delete">✕</span></span>';
         }).join('');
       }
@@ -1632,6 +1632,15 @@ function showConfirm(msg, cb) {
   document.getElementById('confirmModal').classList.add('open');
 }
 function closeConfirm() { document.getElementById('confirmModal').classList.remove('open'); }
+function editSelectedCustom() {
+  const sel = document.querySelector('#customModelList2 .model-tag.selected');
+  if (!sel) { clearCustomModalFields(); openModal('customModal'); return; }
+  const id = sel.getAttribute('data-model');
+  const i = customModels.findIndex(m => m.id === id);
+  if (i === -1) { clearCustomModalFields(); openModal('customModal'); return; }
+  editCustomModel(i);
+  openModal('customModal');
+}
 async function reload() {
   try {
     await api('POST','/reload');
