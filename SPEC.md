@@ -1,6 +1,6 @@
 # cc2go 版本管理规范 (SPEC)
 
-> 当前版本：0.5.0 | 更新：2026-05-17
+> 当前版本：0.6.0 | 更新：2026-05-17
 
 ---
 
@@ -17,9 +17,9 @@ MAJOR.MINOR.PATCH
 
 | 升级 | 触发条件 | 示例 |
 |------|---------|------|
-| PATCH | Bug 修复、文案调整 | `0.5.0` → `0.5.1` |
-| MINOR | 新功能、向后兼容 | `0.5.0` → `0.6.0` |
-| MAJOR | 不兼容的 API 变更 | `0.5.0` → `1.0.0` |
+| PATCH | Bug 修复、文案调整 | `0.6.0` → `0.6.1` |
+| MINOR | 新功能、向后兼容 | `0.6.0` → `0.7.0` |
+| MAJOR | 不兼容的 API 变更 | `0.6.0` → `1.0.0` |
 
 
 ## 升版步骤
@@ -58,6 +58,7 @@ git push && git push --tags
 |------|------|---------|
 | 0.5.0 | 2026-05-17 | 初始开发：格式转换、系统托盘、打包脚本、工具调用循环 |
 | 0.5.0+ | 2026-05-17 | 新增：流式 SSE 转换（streaming.py）、MCP web_search 短路（mcp_bypass.py）、错误分类与自适应重试（error_handler.py）、自定义模型 display_name 支持、auto-ID 生成、output_config 修复、Cache-Control 缓存防过期、mmx Windows 路径修复、54 个单元测试 |
+| 0.6.0 | 2026-05-17 | 模型 UI 重构（预置/自定义分区、编辑按钮）、托盘简化（仅管理页+退出）、thinking 块三路处理（透传/摘除/转换）、DeepSeek reasoning_content 修复（tool_calls 消息自动补空）、自定义模型按 id 路由匹配（避免预置模型名冲突）、错误归档增强、19 个格式转换单元测试 |
 
 
 ## 项目目录结构
@@ -66,7 +67,8 @@ git push && git push --tags
 cc2go/
 ├── src/                    # 源码
 │   ├── router.py           # 主服务：格式转换 + API 端点 + Web UI
-│   ├── tray.py             # 系统托盘 (pystray)
+│   ├── router_test.py      # 格式转换单元测试（19 用例）
+│   ├── tray.py             # 系统托盘（仅管理页 + 退出）
 │   ├── streaming.py        # 流式 SSE 转换 (OpenAI → Anthropic)
 │   ├── streaming_test.py   # 流式转换测试 (16 用例)
 │   ├── mcp_bypass.py       # MCP web_search 短路 (mmx CLI)
@@ -87,8 +89,9 @@ cc2go/
 ├── .env.example            # 配置模板
 ├── SPEC.md                 # 本文件
 ├── README.md               # 项目说明
-├── .gitignore
-└── LICENSE
+├── ARCHITECTURE.md         # 架构文档
+└── .gitignore
+```
 
 
 ## API 端点
