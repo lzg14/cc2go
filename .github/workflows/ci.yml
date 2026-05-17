@@ -24,10 +24,10 @@ jobs:
 
     - name: Run tests
       run: |
-        python -c "from router import app; print('Import OK')"
-        python -c "from router import Config; print('Config OK')"
+        python -c "from src.router import app; print('Import OK')"
+        python -c "from src.router import Config; print('Config OK')"
 
     - name: Lint
       run: |
         pip install ruff
-        ruff check router.py || true
+        ruff check src/ || true

@@ -4,11 +4,13 @@ cc2go 系统托盘 - 后台静默运行，托盘图标管理
 
 import os
 import sys
+import json
 import atexit
 import threading
 import webbrowser
+import urllib.request
+import urllib.error
 
-import requests
 import uvicorn
 import pystray
 from PIL import Image, ImageDraw, ImageFont
@@ -64,38 +66,31 @@ def open_admin():
     webbrowser.open(url, new=0)
 
 
-def get_current_model():
-    """从 API 获取当前选中模型"""
+def _api_request(method, path, data=None, timeout=3):
+    """简单的同步 HTTP 请求（标准库 urllib，无外部依赖）"""
+    url = f"http://127.0.0.1:{config.router_port}{path}"
+    headers = {"Content-Type": "application/json"} if data else {}
+    body = json.dumps(data).encode("utf-8") if data else None
+    req = urllib.request.Request(url, data=body, headers=headers, method=method)
     try:
-        r = requests.get(f"http://127.0.0.1:{config.router_port}/api/config", timeout=3)
-        if r.ok:
-            return r.json().get("selected_model", "")
-    except:
-        pass
-    return ""
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            return json.loads(resp.read().decode("utf-8"))
+    except (urllib.error.URLError, urllib.error.HTTPError):
+        return None
+
+
+def get_current_model():
+    cfg = _api_request("GET", "/api/config")
+    return cfg.get("selected_model", "") if cfg else ""
 
 
 def get_models_list():
-    """获取所有可用模型列表"""
-    try:
-        r = requests.get(f"http://127.0.0.1:{config.router_port}/api/config", timeout=3)
-        if r.ok:
-            return r.json().get("models", [])
-    except:
-        pass
-    return []
+    cfg = _api_request("GET", "/api/config")
+    return cfg.get("models", []) if cfg else []
 
 
 def switch_model(model_name):
-    """切换模型并更新托盘菜单"""
-    try:
-        requests.put(
-            f"http://127.0.0.1:{config.router_port}/api/config",
-            json={"selected_model": model_name},
-            timeout=5
-        )
-    except:
-        pass
+    _api_request("PUT", "/api/config", data={"selected_model": model_name}, timeout=5)
 
 
 def build_model_menu():
