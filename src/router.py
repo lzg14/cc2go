@@ -21,6 +21,7 @@ from fastapi import FastAPI, Request, HTTPException, Body
 from fastapi.responses import StreamingResponse, JSONResponse, HTMLResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
 from dotenv import load_dotenv
+from streaming import convert_openai_stream_to_anthropic
 
 load_dotenv()
 
@@ -569,7 +570,25 @@ async def anthropic_messages(request: Request):
             logger.info(f"[Request Payload] model={model_name}, endpoint={endpoint}, "
                          f"payload={json.dumps(openai_payload, ensure_ascii=False)[:3000]}")
 
-        # 调用 API
+        # 检查是否流式请求
+        is_stream = body.get("stream", False)
+        if is_stream:
+            logger.debug(f"[Stream] model={model_name}, streaming enabled")
+            response = await call_opencode(endpoint, openai_payload, api_key=custom_key, base_url=custom_base)
+            if response.status_code != 200:
+                logger.error(f"[Error] OpenCode API: status={response.status_code}")
+                raise HTTPException(status_code=response.status_code, detail=response.text)
+            return StreamingResponse(
+                convert_openai_stream_to_anthropic(response, model_name),
+                media_type="text/event-stream",
+                headers={
+                    "Cache-Control": "no-cache",
+                    "Connection": "keep-alive",
+                    "X-Request-ID": f"req-{int(time.time() * 1000)}",
+                }
+            )
+
+        # 调用 API（非流式）
         response = await call_opencode(endpoint, openai_payload, api_key=custom_key, base_url=custom_base)
 
         # 全量日志：上游原始响应
