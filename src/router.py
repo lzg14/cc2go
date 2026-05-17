@@ -6,6 +6,7 @@ Claude Code (Anthropic) -> OpenAI 格式 -> OpenCode Go
 
 import os
 import sys
+import re
 import json
 import time
 import logging
@@ -82,7 +83,7 @@ def load_custom_models():
     try:
         with open(CUSTOM_MODELS_FILE, "r") as f:
             return json.load(f)
-    except:
+    except Exception:
         return []
 
 def save_custom_models(models):
@@ -154,17 +155,25 @@ except:
 
 # 请求统计（持久化到文件）
 STATS_FILE = os.path.join(get_base_dir(), "data", "stats.json")
+_stats_dirty = 0
+
 def load_stats():
     try:
         with open(STATS_FILE, "r") as f:
             return json.load(f)
-    except:
+    except Exception:
         return {"requests": 0, "errors": 0}
-def save_stats():
+
+def save_stats(force=False):
+    global _stats_dirty
     try:
+        _stats_dirty += 1
+        if not force and _stats_dirty < 10:
+            return
         with open(STATS_FILE, "w") as f:
             json.dump({"requests": request_count, "errors": error_count}, f)
-    except:
+        _stats_dirty = 0
+    except Exception:
         pass
 stats = load_stats()
 request_count = stats["requests"]
@@ -173,7 +182,6 @@ error_count = stats["errors"]
 
 def strip_system_reminder(text: str) -> str:
     """移除用户消息中的 <system-reminder> 块（Claude Code 注入的技能提示），防止触发上游内容过滤"""
-    import re
     return re.sub(r'<system-reminder>.*?</system-reminder>', '', text, flags=re.DOTALL).strip()
 
 
@@ -596,10 +604,10 @@ async def anthropic_messages(request: Request):
         return JSONResponse(content=anthropic_response)
 
     except HTTPException:
-        error_count += 1; save_stats()
+        error_count += 1; save_stats(force=True)
         raise
     except Exception as e:
-        error_count += 1; save_stats()
+        error_count += 1; save_stats(force=True)
         duration = time.time() - start_time
         logger.error(f"[Error] {e}")
         import traceback
@@ -1333,6 +1341,8 @@ function syncToModals(cfg) {
 }
 function setVal(id, v) { const el = document.getElementById(id); if (el) el.value = v||''; }
 function setChecked(id, v) { const el = document.getElementById(id); if (el) el.checked = v!==false; }
+function getVal(id) { const el = document.getElementById(id); return el ? el.value : ''; }
+function getChecked(id) { const el = document.getElementById(id); return el ? el.checked : false; }
 function saveServiceModal() { closeModal('serviceModal'); save(); }
 function saveAdvancedModal() { closeModal('advancedModal'); save(); }
 function saveAliasModal() { closeModal('aliasModal'); save(); }
@@ -1516,14 +1526,11 @@ def refresh_models():
                     for mid in ids:
                         ep = "/v1/messages" if mid.startswith("minimax") else "/v1/chat/completions"
                         new_models[mid] = {"id": mid, "endpoint": ep}
-                    config.models = merge_models(new_models, load_custom_models())
-                    # 缓存到本地
-                    try:
-                        with open(cache_file, "w") as f:
-                            json.dump(ids, f)
-                    except:
-                        pass
-                    logger.info(f"[Models] 从上游加载 {len(new_models)} 个模型 + {len(load_custom_models())} 个自定义")
+                    custom = load_custom_models()
+                    config.models = merge_models(new_models, custom)
+                    with open(cache_file, "w") as f:
+                        json.dump(ids, f)
+                    logger.info(f"[Models] 从上游加载 {len(new_models)} 个模型 + {len(custom)} 个自定义")
                     return
     except Exception as e:
         logger.warning(f"[Models] 上游拉取失败: {e}")
