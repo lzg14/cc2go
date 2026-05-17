@@ -23,6 +23,13 @@ from fastapi.staticfiles import StaticFiles
 from dotenv import load_dotenv
 from streaming import convert_openai_stream_to_anthropic
 from mcp_bypass import should_bypass, handle_bypass, extract_query
+from error_handler import (
+    classify_and_suggest_action,
+    get_backoff_delay,
+    parse_upstream_error,
+    RetryStrategy,
+    _archive_limiter as error_archive_limiter,
+)
 
 load_dotenv()
 
@@ -121,6 +128,10 @@ class Config:
         self.selected_model = os.getenv("SELECTED_MODEL", "")
         self.claude_model_alias = os.getenv("CLAUDE_MODEL_ALIAS", "")
         self.claude_settings_path = os.getenv("CLAUDE_SETTINGS_PATH", os.path.expanduser("~/.claude/settings.json"))
+        self.fallback_models = [
+            m.strip() for m in os.getenv("FALLBACK_MODELS", "").split(",")
+            if m.strip()
+        ]
         self.models = merge_models(DEFAULT_MODELS, load_custom_models())
 
     def reload(self):
@@ -440,17 +451,65 @@ async def call_opencode(endpoint: str, payload: dict, base_url: str = None, api_
         "Content-Type": "application/json",
         "x-api-key": key
     }
+    fallback_idx = 0  # <-- 初始化在循环外
     for attempt in range(config.max_retry):
         try:
             async with httpx.AsyncClient(timeout=180.0) as client:
                 response = await client.post(url, headers=headers, json=payload)
-                if response.status_code < 500:
+
+                if response.status_code == 200:
                     return response
-                logger.warning(f"Attempt {attempt + 1} failed: {response.status_code}")
+
+                # 解析响应体
+                try:
+                    raw_body = json.loads(response.text)
+                except Exception:
+                    raw_body = response.text
+
+                strategy, log_msg, hint = classify_and_suggest_action(
+                    response.status_code, raw_body, attempt, config.max_retry
+                )
+                logger.warning(log_msg)
+
+                # 限速归档
+                if response.status_code >= 400 and error_archive_limiter.archive():
+                    save_error_archive(
+                        datetime.now().isoformat(),
+                        payload.get("model", "unknown"),
+                        payload,
+                        None,
+                        response.text,
+                        response.status_code
+                    )
+
+                if strategy == RetryStrategy.FAIL_FAST:
+                    raise HTTPException(status_code=response.status_code, detail=parse_upstream_error(raw_body))
+
+                if strategy == RetryStrategy.SWITCH_MODEL:
+                    if fallback_idx < len(config.fallback_models):
+                        fallback_model = config.fallback_models[fallback_idx]
+                        fallback_idx += 1
+                        logger.info(f"[Fallback] 切换到模型: {fallback_model}")
+                        payload = dict(payload, model=fallback_model)
+                        continue
+                    else:
+                        raise HTTPException(status_code=response.status_code, detail=parse_upstream_error(raw_body))
+
+                if strategy == RetryStrategy.RETRY_WITH_BACKOFF:
+                    delay = get_backoff_delay(attempt)
+                    logger.info(f"[Retry] 退避 {delay:.1f}s")
+                    await asyncio.sleep(delay)
+                    continue
+
+        except HTTPException:
+            raise
         except Exception as e:
             logger.warning(f"Attempt {attempt + 1} error: {e}")
-        if attempt < config.max_retry - 1:
-            await asyncio.sleep(config.retry_delay * (attempt + 1))
+            if attempt < config.max_retry - 1:
+                await asyncio.sleep(get_backoff_delay(attempt))
+            else:
+                raise HTTPException(status_code=500, detail=str(e))
+
     raise HTTPException(status_code=500, detail="OpenCode API 调用失败")
 
 
