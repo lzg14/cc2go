@@ -171,3 +171,5 @@ scripts\stop.bat        # 停止后台进程
 ## License
 
 MIT
+
+> 技术细节见 [ARCHITECTURE.md](ARCHITECTURE.md)
