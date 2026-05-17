@@ -105,7 +105,8 @@ def merge_models(upstream, custom):
     merged = dict(upstream)
     for m in custom:
         mid = m["id"]
-        merged[mid] = {"id": mid, "endpoint": "/v1/chat/completions"}
+        ep = m.get("endpoint", "/v1/chat/completions")
+        merged[mid] = {"id": mid, "endpoint": ep}
     return merged
 
 
@@ -566,9 +567,13 @@ async def anthropic_messages(request: Request):
                         custom_key = cm["api_key"]
                 break
 
-        # 自定义模型直接透传，不做格式转换
-        if custom_base:
-            full_url = custom_base + custom_ep if custom_ep else custom_base
+        # 清除 output_config（某些 API 拒绝 empty tools + json_schema）
+        if not tools and body.get("output_config", {}).get("format", {}).get("type") == "json_schema":
+            del body["output_config"]
+
+        # 自定义模型透传：仅对 Anthropic 格式端点保留直传，OpenAI 格式走正常转换路径
+        if custom_base and custom_ep == "/v1/messages":
+            full_url = custom_base + custom_ep
             logger.info(f"[Passthrough] model={model_name}, url={full_url}")
             response = await call_opencode("", body, api_key=custom_key, full_url=full_url)
             raw_text = response.text
@@ -590,9 +595,6 @@ async def anthropic_messages(request: Request):
         # MiniMax 用 /v1/messages 端点
         if endpoint == "/v1/messages":
             body["thinking"] = {"type": "disabled"}
-            # MiniMax rejects json_schema output when no tools provided
-            if not tools and body.get("output_config", {}).get("format", {}).get("type") == "json_schema":
-                del body["output_config"]
             if config.detailed_logging:
                 logger.debug(f"[MiniMax Payload] {json.dumps(body, ensure_ascii=False)[:1000]}")
             logger.debug(f"[Payload] Direct forward to {endpoint} with thinking disabled")
@@ -1061,7 +1063,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','SF Pro Display',sy
 </div>
 
 <div class="btn-row" style="margin-bottom:6px">
-<button class="btn btn-secondary" onclick="openModal('customModal')">➕ <span data-i18n="addModel">新增模型</span></button>
+<button class="btn btn-secondary" onclick="clearCustomModalFields();openModal('customModal')">➕ <span data-i18n="addModel">新增模型</span></button>
 <button class="btn btn-secondary" onclick="editSelectedCustom()">✎ <span data-i18n="editModel">编辑模型</span></button>
 <button class="btn btn-secondary" onclick="fetchModels()">🔄 <span data-i18n="refreshModels">刷新模型</span></button>
 </div>
@@ -1110,8 +1112,9 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','SF Pro Display',sy
 <div class="modal-overlay" id="customModal">
 <div class="modal" style="padding:28px"><h2 data-i18n="customModels" style="margin-bottom:18px">自定义模型</h2>
 <div style="display:flex;flex-direction:column;gap:10px">
-<input id="newModelName" data-i18n="modelNamePlaceholder" placeholder="模型 ID" style="width:100%;padding:10px 14px;border:1px solid #d2d2d7;border-radius:8px;font-size:15px;box-sizing:border-box">
-<input id="newModelDisplayName" data-i18n="modelDisplayPlaceholder" placeholder="显示名（留空=模型名）" style="width:100%;padding:10px 14px;border:1px solid #d2d2d7;border-radius:8px;font-size:15px;box-sizing:border-box">
+<input id="newModelDisplayName" data-i18n="modelDisplayPlaceholder" placeholder="显示名" style="width:100%;padding:10px 14px;border:1px solid #d2d2d7;border-radius:8px;font-size:15px;box-sizing:border-box">
+<div id="newModelIdDisplay" style="font-size:12px;color:#86868b;padding:0 2px"></div>
+<input id="newModelName" type="hidden">
 <input id="newModelUrl" data-i18n="modelUrlPlaceholder" placeholder="Base URL (https://...)" style="width:100%;padding:10px 14px;border:1px solid #d2d2d7;border-radius:8px;font-size:15px;box-sizing:border-box">
 <select id="newModelFormat" style="width:100%;padding:10px 14px;border:1px solid #d2d2d7;border-radius:8px;font-size:15px;background:#fff;box-sizing:border-box">
 <option value="openai">OpenAI (/v1/chat/completions)</option>
@@ -1207,8 +1210,7 @@ const I18N = {
     logLevel: "日志级别",
     disableThinking: "禁用思考模式",
     detailedLogging: "记录详细日志",
-    modelNamePlaceholder: "模型名",
-    modelDisplayPlaceholder: "显示名（留空=模型名）",
+    modelDisplayPlaceholder: "显示名",
     modelUrlPlaceholder: "API 地址 (https://...)",
     modelKeyPlaceholder: "API Key（留空使用全局）",
     getKey: "获取 Key",
@@ -1264,8 +1266,7 @@ const I18N = {
     logLevel: "Log level",
     disableThinking: "Disable thinking mode",
     detailedLogging: "Detailed request logging",
-    modelNamePlaceholder: "Model ID",
-    modelDisplayPlaceholder: "Display name (leave empty = use ID)",
+    modelDisplayPlaceholder: "Display name",
     modelUrlPlaceholder: "API URL (https://...)",
     modelKeyPlaceholder: "API Key (leave empty = use global)",
     getKey: "Get Key",
@@ -1382,9 +1383,18 @@ function renderCustomModels() {
     '<span onclick="editCustomModel('+i+')" style="cursor:pointer;color:#0071e3;font-size:12px;white-space:nowrap">编辑</span>'+
     '<span onclick="deleteCustomModel('+i+')" style="cursor:pointer;color:#ff3b30;font-size:12px;white-space:nowrap">删除</span></div>').join('');
 }
+function clearCustomModalFields() {
+  document.getElementById('newModelName').value = '';
+  document.getElementById('newModelDisplayName').value = '';
+  document.getElementById('newModelUrl').value = '';
+  document.getElementById('newModelApiKey').value = '';
+  document.getElementById('newModelIdDisplay').textContent = '';
+  window._editingIdx = undefined;
+}
 function editCustomModel(i) {
   const m = customModels[i];
   document.getElementById('newModelName').value = m.id;
+  document.getElementById('newModelIdDisplay').textContent = 'ID: ' + m.id;
   document.getElementById('newModelDisplayName').value = m.display_name||'';
   document.getElementById('newModelUrl').value = m.base_url||m.url||'';
   document.getElementById('newModelFormat').value = (m.endpoint||'').includes('messages') ? 'anthropic' : 'openai';
@@ -1468,26 +1478,30 @@ async function selectModel(name) {
   await load();
   toast(t('switched')+': '+name);
 }
+function generateModelId(displayName) {
+  const slug = displayName.toLowerCase().replace(/[^a-z0-9\u4e00-\u9fa5]+/g, '-').replace(/^-|-$/g, '') || 'custom';
+  return slug + '-' + Date.now().toString(36).slice(-5);
+}
 function saveCustomModal() {
-  const name = document.getElementById('newModelName').value.trim();
-  const display = document.getElementById('newModelDisplayName').value.trim() || name;
+  const display = document.getElementById('newModelDisplayName').value.trim();
   const url = document.getElementById('newModelUrl').value.trim();
   const fmt = document.getElementById('newModelFormat').value;
   const ak = document.getElementById('newModelApiKey').value.trim();
   const ep = fmt === 'anthropic' ? '/v1/messages' : '/v1/chat/completions';
-  if (!name) return;
+  if (!display) return;
   // 编辑已有模型
   if (window._editingIdx !== undefined && window._editingIdx < customModels.length) {
-    customModels[window._editingIdx] = {id: name, display_name: display, base_url: url, endpoint: ep, api_key: ak};
+    customModels[window._editingIdx] = {id: customModels[window._editingIdx].id, display_name: display, base_url: url, endpoint: ep, api_key: ak};
     window._editingIdx = undefined;
   } else {
-    customModels.push({id: name, display_name: display, base_url: url, endpoint: ep, api_key: ak});
+    customModels.push({id: generateModelId(display), display_name: display, base_url: url, endpoint: ep, api_key: ak});
   }
   api('PUT','/api/custom-models', customModels).then(() => {
     document.getElementById('newModelName').value = '';
     document.getElementById('newModelDisplayName').value = '';
     document.getElementById('newModelUrl').value = '';
     document.getElementById('newModelApiKey').value = '';
+    document.getElementById('newModelIdDisplay').textContent = '';
     closeModal('customModal');
     renderCustomModels();
     load();
@@ -1529,10 +1543,10 @@ function showConfirm(msg, cb) {
 function closeConfirm() { document.getElementById('confirmModal').classList.remove('open'); }
 function editSelectedCustom() {
   const sel = document.querySelector('#modelList .model-tag.selected');
-  if (!sel) { openModal('customModal'); return; }
+  if (!sel) { clearCustomModalFields(); openModal('customModal'); return; }
   const id = sel.getAttribute('data-model');
   const i = customModels.findIndex(m => m.id === id);
-  if (i === -1) { openModal('customModal'); return; }
+  if (i === -1) { clearCustomModalFields(); openModal('customModal'); return; }
   editCustomModel(i);
   openModal('customModal');
 }

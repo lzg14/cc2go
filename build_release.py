@@ -10,7 +10,8 @@ import zipfile
 import subprocess
 from pathlib import Path
 
-from src.router import VERSION
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "src"))
+from router import VERSION
 
 PROJECT_DIR = Path(__file__).parent
 DIST_DIR = PROJECT_DIR / "dist"

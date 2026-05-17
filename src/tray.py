@@ -102,15 +102,16 @@ def switch_model(model_name):
     _api_request("PUT", "/api/config", data={"selected_model": model_name}, timeout=5)
 
 
-def get_custom_model_ids():
+def get_custom_models_map():
+    """返回 {id: display_name} 字典"""
     cm = _api_request("GET", "/api/custom-models")
-    return [m["id"] for m in (cm or [])]
+    return {m["id"]: (m.get("display_name") or m["id"]) for m in (cm or [])}
 
 
 def build_model_menu():
     """构建模型切换子菜单"""
     models = get_models_list()
-    custom_ids = set(get_custom_model_ids())
+    custom_map = get_custom_models_map()
 
     def make_callback(name):
         def cb():
@@ -119,7 +120,8 @@ def build_model_menu():
 
     items = []
     for name in sorted(models):
-        label = name + " ★" if name in custom_ids else name
+        dn = custom_map.get(name)
+        label = (dn + " ★") if dn else name
         items.append(
             pystray.MenuItem(
                 label,

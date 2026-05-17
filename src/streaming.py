@@ -24,13 +24,13 @@ def build_message_start_event(msg_id: str, model: str) -> Dict:
     }
 
 
-def build_content_block_start(index: int, block_type: str = "text") -> Dict:
+def build_content_block_start(index: int, block_type: str = "text", **kwargs) -> Dict:
     content_block = {"type": block_type}
     if block_type == "text":
         content_block["text"] = ""
     elif block_type == "tool_use":
-        content_block["id"] = ""
-        content_block["name"] = ""
+        content_block["id"] = kwargs.get("id", "")
+        content_block["name"] = kwargs.get("name", "")
         content_block["input"] = {}
     return {
         "type": "content_block_start",
@@ -41,14 +41,10 @@ def build_content_block_start(index: int, block_type: str = "text") -> Dict:
 
 def build_content_block_delta(index: int, delta_type: str, content: str) -> Dict:
     delta = {}
-    if delta_type == "text":
-        delta["text"] = content
-    elif delta_type == "tool_use_input":
-        delta["input"] = content
-    elif delta_type == "tool_use_name":
-        delta["name"] = content
-    elif delta_type == "tool_use_id":
-        delta["id"] = content
+    if delta_type == "text_delta":
+        delta = {"type": "text_delta", "text": content}
+    elif delta_type == "input_json_delta":
+        delta = {"type": "input_json_delta", "partial_json": content}
     return {
         "type": "content_block_delta",
         "index": index,
@@ -134,13 +130,12 @@ async def convert_openai_stream_to_anthropic(
                     build_content_block_start(block_index, "text"), "content_block_start"
                 )
             yield format_sse_event(
-                build_content_block_delta(block_index, "text", content),
+                build_content_block_delta(block_index, "text_delta", content),
                 "content_block_delta"
             )
 
         for tc in tool_calls:
             tc_id = tc.get("id", "")
-            tc_index = tc.get("index", 0)
             func = tc.get("function", {})
             tc_name = func.get("name", "")
             tc_input = func.get("arguments", "")
@@ -151,21 +146,13 @@ async def convert_openai_stream_to_anthropic(
                     block_index += 1
                 current_block_type = "tool_use"
                 yield format_sse_event(
-                    build_content_block_start(block_index, "tool_use"),
+                    build_content_block_start(block_index, "tool_use", id=tc_id, name=tc_name),
                     "content_block_start"
-                )
-                yield format_sse_event(
-                    build_content_block_delta(block_index, "tool_use_id", tc_id),
-                    "content_block_delta"
-                )
-                yield format_sse_event(
-                    build_content_block_delta(block_index, "tool_use_name", tc_name),
-                    "content_block_delta"
                 )
 
             if tc_input:
                 yield format_sse_event(
-                    build_content_block_delta(block_index, "tool_use_input", tc_input),
+                    build_content_block_delta(block_index, "input_json_delta", tc_input),
                     "content_block_delta"
                 )
 
