@@ -177,23 +177,16 @@ def strip_system_reminder(text: str) -> str:
     return re.sub(r'<system-reminder>.*?</system-reminder>', '', text, flags=re.DOTALL).strip()
 
 
-def extract_reasoning_text(text: str) -> tuple:
-    """将 [思考过程]/[思考] 前缀文本分离为 (实际内容, reasoning_content)。
-    返回 (cleaned_text, reasoning)，如果无前缀则 reasoning 为空字符串。"""
-    cleaned = text
-    reasoning = ""
+def strip_reasoning(text: str) -> str:
+    """移除 [思考过程]/[思考] 前缀块，省 token。只保留实际内容"""
     for prefix in ("[思考过程]", "[思考]"):
-        if cleaned.startswith(prefix):
-            rest = cleaned[len(prefix):].strip()
+        if text.startswith(prefix):
+            rest = text[len(prefix):].strip()
             if "\n" in rest:
-                reasoning, cleaned = rest.split("\n", 1)
-                reasoning = reasoning.strip()
-                cleaned = cleaned.strip()
-            else:
-                reasoning = rest
-                cleaned = ""
-            break
-    return cleaned, reasoning
+                _, after = rest.split("\n", 1)
+                return after.strip()
+            return ""
+    return text
 
 
 def convert_anthropic_messages_to_openai(messages: List[Dict]) -> List[Dict]:
@@ -214,7 +207,6 @@ def convert_anthropic_messages_to_openai(messages: List[Dict]) -> List[Dict]:
             tool_calls_list = []
             tool_results = []
 
-            reasoning_extra = ""
             for item in content:
                 if not isinstance(item, dict):
                     continue
@@ -225,9 +217,7 @@ def convert_anthropic_messages_to_openai(messages: List[Dict]) -> List[Dict]:
                     t = item.get("text", "")
                     t = strip_system_reminder(t)
                     if role == "assistant":
-                        t, r = extract_reasoning_text(t)
-                        if r:
-                            reasoning_extra = r
+                        t = strip_reasoning(t)
                     content_items.append({"type": "text", "text": t})
 
                 elif item_type == "image":
@@ -298,20 +288,13 @@ def convert_anthropic_messages_to_openai(messages: List[Dict]) -> List[Dict]:
                     msg_dict["content"] = None
                 if tool_calls_list:
                     msg_dict["tool_calls"] = tool_calls_list
-                if reasoning_extra:
-                    msg_dict["reasoning_content"] = reasoning_extra
                 openai_messages.append(msg_dict)
 
         elif content:
             c = strip_system_reminder(content)
             if role == "assistant":
-                c, reasoning_extra = extract_reasoning_text(c)
-            else:
-                reasoning_extra = ""
-            msg = {"role": role, "content": c}
-            if reasoning_extra:
-                msg["reasoning_content"] = reasoning_extra
-            openai_messages.append(msg)
+                c = strip_reasoning(c)
+            openai_messages.append({"role": role, "content": c})
 
     return openai_messages
 
