@@ -1446,10 +1446,10 @@ async function load() {
       } else {
         cEl.innerHTML = customModels.map(m => {
           const label = m.display_name || m.id;
-          const info = (m.base_url||'') + (m.endpoint||'');
-          return '<span class="model-tag'+(m.id===sel?' selected':'')+' custom" data-model="'+m.id+'" onclick="selectModel(\''+m.id+'\')" style="position:relative;padding-right:18px">' +
+          return '<span class="model-tag'+(m.id===sel?' selected':'')+' custom" data-model="'+m.id+'" onclick="selectModel(\''+m.id+'\')" style="position:relative;padding-right:36px">' +
             label+' <sup style="font-size:10px;opacity:.7">C</sup>' +
-            '<span class="tag-action" onclick="event.stopPropagation();deleteCustomModelById(\''+m.id+'\')" style="cursor:pointer;color:#ff3b30;font-size:12px;position:absolute;top:2px;right:3px" title="Delete">✕</span></span>';
+            '<span onclick="event.stopPropagation();editCustomModelById(\''+m.id+'\')" style="cursor:pointer;color:#0071e3;font-size:12px;position:absolute;top:2px;right:18px" title="Edit">✎</span>' +
+            '<span onclick="event.stopPropagation();deleteCustomModelById(\''+m.id+'\')" style="cursor:pointer;color:#ff3b30;font-size:12px;position:absolute;top:2px;right:3px" title="Delete">✕</span></span>';
         }).join('');
       }
     }
@@ -1607,7 +1607,7 @@ function saveCustomModal() {
     toast(t('saved'));
   }).catch(e => toast(t('savefail')+': '+e.message, false));
 }
-function editCustomModelByid(id) {
+function editCustomModelById(id) {
   const i = customModels.findIndex(m => m.id === id);
   if (i === -1) return;
   editCustomModel(i);
