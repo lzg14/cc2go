@@ -8,15 +8,23 @@ import atexit
 import threading
 import webbrowser
 
+import requests
 import uvicorn
 import pystray
 from PIL import Image, ImageDraw, ImageFont
 
-os.chdir(os.path.dirname(os.path.abspath(__file__)))
+
+def get_base_dir():
+    """运行时目录，兼容 PyInstaller onefile 打包"""
+    if getattr(sys, 'frozen', False):
+        return sys._MEIPASS
+    return os.path.dirname(os.path.abspath(__file__))
+
+os.chdir(get_base_dir())
 
 from router import app, config, logger, VERSION
 
-PID_FILE = os.path.join(os.path.dirname(__file__), "tray.pid")
+PID_FILE = os.path.join(get_base_dir(), "cc2go.pid")
 
 
 def save_pid():
@@ -33,7 +41,7 @@ def remove_pid():
 
 
 def load_icon():
-    icon_path = os.path.join(os.path.dirname(__file__), "static", "favicon-32x32.png")
+    icon_path = os.path.join(get_base_dir(), "static", "favicon-32x32.png")
     if os.path.exists(icon_path):
         try:
             img = Image.open(icon_path)
@@ -54,6 +62,76 @@ def load_icon():
 def open_admin():
     url = f"http://127.0.0.1:{config.router_port}"
     webbrowser.open(url)
+
+
+def get_current_model():
+    """从 API 获取当前选中模型"""
+    try:
+        r = requests.get(f"http://127.0.0.1:{config.router_port}/api/config", timeout=3)
+        if r.ok:
+            return r.json().get("selected_model", "")
+    except:
+        pass
+    return ""
+
+
+def get_models_list():
+    """获取所有可用模型列表"""
+    try:
+        r = requests.get(f"http://127.0.0.1:{config.router_port}/api/config", timeout=3)
+        if r.ok:
+            return r.json().get("models", [])
+    except:
+        pass
+    return []
+
+
+def switch_model(model_name):
+    """切换模型并更新托盘菜单"""
+    try:
+        requests.put(
+            f"http://127.0.0.1:{config.router_port}/api/config",
+            json={"selected_model": model_name},
+            timeout=5
+        )
+    except:
+        pass
+
+
+def build_model_menu():
+    """构建模型切换子菜单"""
+    models = get_models_list()
+    current = get_current_model()
+
+    def make_callback(name):
+        def cb():
+            switch_model(name)
+        return cb
+
+    items = []
+    for name in sorted(models):
+        checked = name == current
+        items.append(
+            pystray.MenuItem(
+                f"● {name}" if checked else name,
+                make_callback(name),
+                enabled=True
+            )
+        )
+    return items
+
+
+def build_tray_menu():
+    """构建完整托盘菜单"""
+    model_items = build_model_menu()
+
+    return pystray.Menu(
+        pystray.MenuItem("切换模型", pystray.Menu(*model_items)),
+        pystray.Menu.SEPARATOR,
+        pystray.MenuItem("打开管理页", lambda: open_admin(), default=True),
+        pystray.Menu.SEPARATOR,
+        pystray.MenuItem("退出", quit_app),
+    )
 
 
 def quit_app(icon, item):
@@ -80,11 +158,7 @@ def main():
     t.start()
 
     image = load_icon()
-    menu = pystray.Menu(
-        pystray.MenuItem("打开管理页", lambda: open_admin(), default=True),
-        pystray.Menu.SEPARATOR,
-        pystray.MenuItem("退出", quit_app),
-    )
+    menu = build_tray_menu()
 
     icon = pystray.Icon("cc2go", image, f"cc2go v{VERSION}", menu)
     icon.run()

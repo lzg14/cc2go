@@ -5,6 +5,7 @@ Claude Code (Anthropic) -> OpenAI 格式 -> OpenCode Go
 """
 
 import os
+import sys
 import json
 import time
 import logging
@@ -20,6 +21,14 @@ from fastapi.staticfiles import StaticFiles
 from dotenv import load_dotenv
 
 load_dotenv()
+
+
+def get_base_dir():
+    """运行时目录，兼容 PyInstaller onefile 打包"""
+    if getattr(sys, 'frozen', False):
+        return sys._MEIPASS
+    return os.path.dirname(os.path.abspath(__file__))
+
 
 VERSION = "0.5.0"
 
@@ -39,7 +48,7 @@ DEFAULT_MODELS = {
     "minimax-m2.5": {"id": "minimax-m2.5", "endpoint": "/v1/messages"},
 }
 
-CUSTOM_MODELS_FILE = os.path.join(os.path.dirname(__file__), "custom_models.json")
+CUSTOM_MODELS_FILE = os.path.join(get_base_dir(), "custom_models.json")
 
 def load_custom_models():
     try:
@@ -106,15 +115,14 @@ logger = setup_logger()
 app = FastAPI(title="cc2go", description="Claude Code → OpenCode Go 格式适配器")
 
 try:
-    import os as _os
-    _sd = _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), "static")
-    if _os.path.exists(_sd):
+    _sd = os.path.join(get_base_dir(), "static")
+    if os.path.exists(_sd):
         app.mount("/static", StaticFiles(directory=_sd), name="static")
 except:
     pass
 
 # 请求统计（持久化到文件）
-STATS_FILE = os.path.join(os.path.dirname(__file__), "stats.json")
+STATS_FILE = os.path.join(get_base_dir(), "stats.json")
 def load_stats():
     try:
         with open(STATS_FILE, "r") as f:
@@ -1433,7 +1441,7 @@ applyLang();
 # ============ 启动 ============
 def refresh_models():
     """从上游拉取模型列表，成功则缓存到本地，失败用缓存或默认"""
-    cache_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), "models_cache.json")
+    cache_file = os.path.join(get_base_dir(), "models_cache.json")
     url = f"{config.opencode_base_url}/v1/models"
     headers = {
         "Authorization": f"Bearer {config.opencode_api_key}",
@@ -1482,7 +1490,8 @@ if __name__ == "__main__":
     refresh_models()
     print()
     print("╔═══════════════════════════════════════════════════════════╗")
-    print(f"║                    cc2go v{VERSION}                        ║")
+    version_str = f"cc2go v{VERSION}"
+    print(f"║ {version_str.center(55)} ║")
     print("║          Claude Code → OpenCode Go 适配器               ║")
     print("╠═══════════════════════════════════════════════════════════╣")
     print(f"║  监听: http://{config.router_host}:{config.router_port}                              ║")

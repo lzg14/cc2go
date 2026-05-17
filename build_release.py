@@ -10,7 +10,8 @@ import zipfile
 import subprocess
 from pathlib import Path
 
-VERSION = "1.0.0"
+from router import VERSION
+
 PROJECT_DIR = Path(__file__).parent
 DIST_DIR = PROJECT_DIR / "dist"
 BUILD_DIR = PROJECT_DIR / "build"
@@ -20,8 +21,8 @@ RELEASE_ZIP = PROJECT_DIR / f"cc2go-v{VERSION}-windows.zip"
 REQUIRED_FILES = [
     "static",
     ".env.example",
-    "custom_models.json",
 ]
+
 
 def clean():
     """清理旧的构建产物"""
@@ -32,6 +33,7 @@ def clean():
     if RELEASE_ZIP.exists():
         RELEASE_ZIP.unlink()
         print(f"已删除: {RELEASE_ZIP}")
+
 
 def build_exe(name, entry_point, icon=None):
     """使用 PyInstaller 打包单个 exe"""
@@ -45,12 +47,25 @@ def build_exe(name, entry_point, icon=None):
         "--hidden-import", "pystray",
         "--hidden-import", "PIL",
         "--hidden-import", "PIL._imaging",
-        "--collect-all", "pystray",
+        "--hidden-import", "webbrowser",
+        "--hidden-import", "fastapi",
+        "--hidden-import", "uvicorn",
+        "--hidden-import", "uvicorn.logging",
+        "--hidden-import", "uvicorn.loops",
+        "--hidden-import", "uvicorn.loops.auto",
+        "--hidden-import", "uvicorn.protocols",
+        "--hidden-import", "uvicorn.protocols.http",
+        "--hidden-import", "uvicorn.protocols.http.auto",
+        "--hidden-import", "uvicorn.protocols.websockets",
+        "--hidden-import", "uvicorn.protocols.websockets.auto",
+        "--hidden-import", "uvicorn.lifespan",
+        "--hidden-import", "uvicorn.lifespan.auto",
+        "--hidden-import", "python_dotenv",
     ]
     if icon:
         cmd.extend(["--icon", str(icon)])
     cmd.append(str(entry_point))
-    
+
     print(f"\n>>> 打包 {name}...")
     result = subprocess.run(cmd, cwd=PROJECT_DIR)
     if result.returncode != 0:
@@ -58,17 +73,20 @@ def build_exe(name, entry_point, icon=None):
         sys.exit(1)
     print(f"成功: {name}")
 
+
 def collect_release():
     """收集所有文件到 release 目录"""
     RELEASE_DIR.mkdir(exist_ok=True)
-    
+
     # 复制 exe
     for exe in ["cc2go.exe", "cc2go-tray.exe"]:
         src = DIST_DIR / exe
         if src.exists():
             shutil.copy2(src, RELEASE_DIR / exe)
             print(f"已复制: {exe}")
-    
+        else:
+            print(f"警告: {exe} 不存在于 dist/")
+
     # 复制其他文件
     for item in REQUIRED_FILES:
         src = PROJECT_DIR / item
@@ -81,7 +99,9 @@ def collect_release():
         elif src.exists():
             shutil.copy2(src, dst)
             print(f"已复制: {item}")
-    
+        else:
+            print(f"警告: 缺少文件 {item}，发布包可能不完整")
+
     # 创建快捷批处理
     (RELEASE_DIR / "start.bat").write_text(
         '@echo off\ncd /d "%~dp0"\nstart "" cc2go.exe\n',
@@ -92,10 +112,24 @@ def collect_release():
         encoding="utf-8"
     )
     (RELEASE_DIR / "stop.bat").write_text(
-        '@echo off\ntaskkill /f /im cc2go.exe 2>nul\ntaskkill /f /im cc2go-tray.exe 2>nul\n',
+        '@echo off\r\n'
+        'chcp 65001 > nul\r\n'
+        'cd /d "%~dp0"\r\n'
+        '\r\n'
+        'if exist cc2go.pid (\r\n'
+        '    set /p PID=<cc2go.pid\r\n'
+        '    taskkill /f /pid %PID% 2>nul\r\n'
+        '    del cc2go.pid 2>nul\r\n'
+        '    echo cc2go stopped.\r\n'
+        ') else (\r\n'
+        '    taskkill /f /im cc2go.exe 2>nul\r\n'
+        '    taskkill /f /im cc2go-tray.exe 2>nul\r\n'
+        '    echo cc2go stopped.\r\n'
+        ')\r\n'
+        'pause\r\n',
         encoding="utf-8"
     )
-    
+
     # 创建使用说明
     readme = f"""# cc2go v{VERSION}
 
@@ -136,6 +170,7 @@ Claude Code → OpenCode Go 适配器
     (RELEASE_DIR / "README.md").write_text(readme, encoding="utf-8")
     print("已创建 README.md")
 
+
 def create_zip():
     """创建发布 ZIP"""
     print(f"\n>>> 创建 {RELEASE_ZIP.name}...")
@@ -146,14 +181,15 @@ def create_zip():
                 arcname = full.relative_to(RELEASE_DIR.parent)
                 zf.write(full, arcname)
                 print(f"  已打包: {arcname}")
-    
+
     size = RELEASE_ZIP.stat().st_size / (1024 * 1024)
     print(f"\n成功: {RELEASE_ZIP.name} ({size:.1f} MB)")
+
 
 def main():
     print(f"cc2go Release Builder v{VERSION}")
     print("=" * 50)
-    
+
     # 检查依赖
     try:
         import PyInstaller
@@ -161,23 +197,24 @@ def main():
         print("错误: 请先安装 PyInstaller")
         print("  pip install pyinstaller")
         sys.exit(1)
-    
+
     clean()
-    
+
     # 打包两个 exe
     build_exe("cc2go", "router.py")
     build_exe("cc2go-tray", "tray.py", icon="static/favicon.ico")
-    
+
     # 收集发布文件
     collect_release()
-    
+
     # 创建 ZIP
     create_zip()
-    
+
     print("\n" + "=" * 50)
     print("打包完成！")
     print(f"发布文件: {RELEASE_ZIP}")
     print(f"解压后大小约: {sum(f.stat().st_size for f in RELEASE_DIR.rglob('*') if f.is_file()) / (1024*1024):.1f} MB")
+
 
 if __name__ == "__main__":
     main()
