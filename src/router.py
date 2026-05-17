@@ -11,6 +11,7 @@ import json
 import time
 import logging
 import asyncio
+import threading
 from datetime import datetime
 from typing import Optional, List, Dict, Any
 
@@ -150,7 +151,7 @@ try:
     _sd = os.path.join(get_base_dir(), "static")
     if os.path.exists(_sd):
         app.mount("/static", StaticFiles(directory=_sd), name="static")
-except:
+except Exception:
     pass
 
 # 请求统计（持久化到文件）
@@ -178,6 +179,9 @@ def save_stats(force=False):
 stats = load_stats()
 request_count = stats["requests"]
 error_count = stats["errors"]
+
+# 系统托盘菜单刷新信号
+model_change_signal = threading.Event()
 
 
 def strip_system_reminder(text: str) -> str:
@@ -514,7 +518,7 @@ async def anthropic_messages(request: Request):
             try:
                 result = json.loads(raw_text) if raw_text else {}
                 return JSONResponse(content=result)
-            except:
+            except Exception:
                 return PlainTextResponse(raw_text)
 
         # MiniMax 用 /v1/messages 端点
@@ -539,7 +543,7 @@ async def anthropic_messages(request: Request):
                 logger.info(f"[Raw Response] model={model_name}, body={raw_text[:2000]}")
             try:
                 result = json.loads(raw_text) if raw_text else {}
-            except:
+            except Exception:
                 result = {"type": "message", "content": [{"type": "text", "text": raw_text}]}
 
             duration = time.time() - start_time
@@ -1528,6 +1532,7 @@ def refresh_models():
                         new_models[mid] = {"id": mid, "endpoint": ep}
                     custom = load_custom_models()
                     config.models = merge_models(new_models, custom)
+                    model_change_signal.set()
                     with open(cache_file, "w") as f:
                         json.dump(ids, f)
                     logger.info(f"[Models] 从上游加载 {len(new_models)} 个模型 + {len(custom)} 个自定义")
@@ -1544,12 +1549,14 @@ def refresh_models():
                     ep = "/v1/messages" if mid.startswith("minimax") else "/v1/chat/completions"
                     cached[mid] = {"id": mid, "endpoint": ep}
                 config.models = merge_models(cached, load_custom_models())
+                model_change_signal.set()
                 logger.info(f"[Models] 从缓存加载 {len(cached)} 个模型")
                 return
-    except:
+    except Exception:
         pass
     # 最终兜底：默认列表
     config.models = merge_models(DEFAULT_MODELS, load_custom_models())
+    model_change_signal.set()
 
 if __name__ == "__main__":
     refresh_models()

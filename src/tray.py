@@ -5,6 +5,7 @@ cc2go 系统托盘 - 后台静默运行，托盘图标管理
 import os
 import sys
 import json
+import time
 import atexit
 import threading
 import webbrowser
@@ -24,7 +25,7 @@ def get_base_dir():
 
 os.chdir(get_base_dir())
 
-from router import app, config, logger, VERSION
+from router import app, config, logger, VERSION, model_change_signal
 
 PID_FILE = os.path.join(get_base_dir(), "data", "cc2go.pid")
 
@@ -38,7 +39,7 @@ def remove_pid():
     try:
         if os.path.exists(PID_FILE):
             os.remove(PID_FILE)
-    except:
+    except Exception:
         pass
 
 
@@ -48,14 +49,14 @@ def load_icon():
         try:
             img = Image.open(icon_path)
             return img.resize((64, 64), Image.LANCZOS)
-        except:
+        except Exception:
             pass
     img = Image.new("RGBA", (64, 64), (0, 0, 0, 0))
     draw = ImageDraw.Draw(img)
     draw.rounded_rectangle([4, 4, 60, 60], radius=14, fill=(0, 113, 227, 255))
     try:
         font = ImageFont.truetype("segoeui.ttf", 28)
-    except:
+    except Exception:
         font = ImageFont.load_default()
     draw.text((14, 14), "c2", fill=(255, 255, 255, 255), font=font)
     return img
@@ -143,6 +144,31 @@ def run_server():
         os._exit(1)
 
 
+_last_models_hash = ""
+
+
+def refresh_tray_menu(icon):
+    """轮询检测模型列表变化，有变化则重建菜单"""
+    global _last_models_hash
+    try:
+        models = get_models_list()
+        h = str(sorted(models))
+        if h != _last_models_hash:
+            _last_models_hash = h
+            icon.menu = build_tray_menu()
+    except Exception:
+        pass
+
+
+def menu_watcher(icon):
+    """后台线程：等待模型变化信号，信号到来时刷新菜单"""
+    while True:
+        model_change_signal.wait()    # 阻塞直到有信号
+        model_change_signal.clear()
+        time.sleep(0.5)              # 等 API 稳定
+        refresh_tray_menu(icon)
+
+
 def main():
     save_pid()
     atexit.register(remove_pid)
@@ -154,6 +180,11 @@ def main():
     menu = build_tray_menu()
 
     icon = pystray.Icon("cc2go", image, f"cc2go v{VERSION}", menu)
+
+    # 模型变化即刷新托盘菜单（事件驱动，无轮询）
+    watcher = threading.Thread(target=menu_watcher, args=(icon,), daemon=True)
+    watcher.start()
+
     icon.run()
 
 
