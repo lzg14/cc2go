@@ -234,6 +234,20 @@ def strip_reasoning(text: str) -> str:
     return text
 
 
+def strip_thinking_from_messages(messages: List[Dict]) -> List[Dict]:
+    """移除消息中所有 thinking 类型的内容块"""
+    result = []
+    for msg in messages:
+        content = msg.get("content")
+        if isinstance(content, list):
+            cleaned = [b for b in content if not isinstance(b, dict) or b.get("type") != "thinking"]
+            if len(cleaned) != len(content):
+                msg = dict(msg)
+                msg["content"] = cleaned
+        result.append(msg)
+    return result
+
+
 def convert_anthropic_messages_to_openai(messages: List[Dict]) -> List[Dict]:
     """
     将 Claude 格式的消息转换为 OpenAI 格式
@@ -575,13 +589,14 @@ async def anthropic_messages(request: Request):
         custom_base = None
         custom_key = None
         custom_ep = None
-        custom_full = None
+        custom_upstream_model = None
         for cm in load_custom_models():
             if cm["id"] == model_name:
                 raw_base = cm.get("base_url") or cm.get("url") or ""
                 if raw_base:
                     custom_base = raw_base.rstrip("/")
                     custom_ep = cm.get("endpoint", "")
+                    custom_upstream_model = cm.get("model") or cm.get("upstream_model") or model_name
                     if cm.get("api_key"):
                         custom_key = cm["api_key"]
                 break
@@ -590,10 +605,14 @@ async def anthropic_messages(request: Request):
         if not tools and body.get("output_config", {}).get("format", {}).get("type") == "json_schema":
             del body["output_config"]
 
+        # 清除消息中的 thinking 块（部分上游不接受该字段）
+        body["messages"] = strip_thinking_from_messages(body.get("messages", []))
+
         # 自定义模型透传：仅对 Anthropic 格式端点保留直传，OpenAI 格式走正常转换路径
         if custom_base and custom_ep == "/v1/messages":
+            body["model"] = custom_upstream_model
             full_url = custom_base + custom_ep
-            logger.info(f"[Passthrough] model={model_name}, url={full_url}")
+            logger.info(f"[Passthrough] model={custom_upstream_model}, url={full_url}")
             response = await call_opencode("", body, api_key=custom_key, full_url=full_url)
             raw_text = response.text
             if response.status_code != 200:
@@ -648,7 +667,7 @@ async def anthropic_messages(request: Request):
 
         # 构建请求
         openai_payload = {
-            "model": model_id,
+            "model": custom_upstream_model or model_id,
             "messages": openai_messages,
         }
         if openai_tools:
@@ -960,7 +979,7 @@ async def open_folder(data: dict = Body(...)):
     if folder_type == "archive":
         folder = config.error_archive_dir
     else:
-        folder = config.log_file.rsplit("\\", 1)[0] if "\\" in config.log_file else os.path.dirname(config.log_file)
+        folder = os.path.dirname(config.log_file)
     try:
         os.startfile(folder)
         return {"status": "ok"}
@@ -1148,14 +1167,20 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','SF Pro Display',sy
 <div class="modal-overlay" id="customModal">
 <div class="modal" style="padding:28px"><h2 data-i18n="customModels" style="margin-bottom:18px">自定义模型</h2>
 <div style="display:flex;flex-direction:column;gap:10px">
+<label data-i18n="modelDisplayName" style="font-size:12px;font-weight:500;color:#6e6e73;margin-bottom:-6px">显示名</label>
 <input id="newModelDisplayName" data-i18n="modelDisplayPlaceholder" placeholder="显示名" style="width:100%;padding:10px 14px;border:1px solid #d2d2d7;border-radius:8px;font-size:15px;box-sizing:border-box">
-<div id="newModelIdDisplay" style="font-size:12px;color:#86868b;padding:0 2px"></div>
 <input id="newModelName" type="hidden">
+<label data-i18n="modelUrl" style="font-size:12px;font-weight:500;color:#6e6e73;margin-bottom:-6px">API 地址</label>
 <input id="newModelUrl" data-i18n="modelUrlPlaceholder" placeholder="Base URL (https://...)" style="width:100%;padding:10px 14px;border:1px solid #d2d2d7;border-radius:8px;font-size:15px;box-sizing:border-box">
+<label data-i18n="modelFormat" style="font-size:12px;font-weight:500;color:#6e6e73;margin-bottom:-6px">格式</label>
 <select id="newModelFormat" style="width:100%;padding:10px 14px;border:1px solid #d2d2d7;border-radius:8px;font-size:15px;background:#fff;box-sizing:border-box">
 <option value="openai">OpenAI (/v1/chat/completions)</option>
 <option value="anthropic">Anthropic (/v1/messages)</option>
 </select>
+<label data-i18n="modelUpstream" style="font-size:12px;font-weight:500;color:#6e6e73;margin-bottom:-6px">上游模型名</label>
+<input id="newModelUpstream" data-i18n="modelUpstreamPlaceholder" placeholder="上游模型名（留空使用 ID）" style="width:100%;padding:10px 14px;border:1px solid #d2d2d7;border-radius:8px;font-size:15px;box-sizing:border-box">
+<div style="font-size:11px;color:#86868b;margin-top:-8px" data-i18n="modelUpstreamDesc">发送给上游的实际模型名，如 deepseek-v4-flash</div>
+<label data-i18n="modelApiKey" style="font-size:12px;font-weight:500;color:#6e6e73;margin-bottom:-6px">API Key</label>
 <input id="newModelApiKey" type="password" data-i18n="modelKeyPlaceholder" placeholder="API Key（留空使用全局）" style="width:100%;padding:10px 14px;border:1px solid #d2d2d7;border-radius:8px;font-size:15px;box-sizing:border-box">
 </div>
 <div class="modal-actions" style="margin-top:20px"><button class="btn btn-secondary" style="flex:none;padding:8px 20px" onclick="closeModal('customModal');window._editingIdx=undefined" data-i18n="cancel">取消</button><button class="btn btn-primary" style="flex:none;padding:8px 20px" onclick="saveCustomModal()" data-i18n="save">保存</button></div>
@@ -1245,8 +1270,15 @@ const I18N = {
     logLevel: "日志级别",
     disableThinking: "禁用思考模式",
     detailedLogging: "记录详细日志",
+    modelDisplayName: "显示名",
+    modelUrl: "API 地址",
+    modelFormat: "格式",
+    modelUpstream: "上游模型名",
+    modelUpstreamDesc: "发送给上游的实际模型名，如 deepseek-v4-flash",
+    modelApiKey: "API Key",
     modelDisplayPlaceholder: "显示名",
     modelUrlPlaceholder: "API 地址 (https://...)",
+    modelUpstreamPlaceholder: "上游模型名（留空使用 ID）",
     modelKeyPlaceholder: "API Key（留空使用全局）",
     getKey: "获取 Key",
     refreshModels: "刷新模型列表",
@@ -1305,8 +1337,15 @@ const I18N = {
     logLevel: "Log level",
     disableThinking: "Disable thinking mode",
     detailedLogging: "Detailed request logging",
+    modelDisplayName: "Display Name",
+    modelUrl: "API URL",
+    modelFormat: "Format",
+    modelUpstream: "Upstream Model",
+    modelUpstreamDesc: "Actual model name sent to upstream, e.g. deepseek-v4-flash",
+    modelApiKey: "API Key",
     modelDisplayPlaceholder: "Display name",
     modelUrlPlaceholder: "API URL (https://...)",
+    modelUpstreamPlaceholder: "Upstream model name (leave empty = use ID)",
     modelKeyPlaceholder: "API Key (leave empty = use global)",
     getKey: "Get Key",
     refreshModels: "Refresh model list",
@@ -1426,17 +1465,17 @@ function clearCustomModalFields() {
   document.getElementById('newModelName').value = '';
   document.getElementById('newModelDisplayName').value = '';
   document.getElementById('newModelUrl').value = '';
+  document.getElementById('newModelUpstream').value = '';
   document.getElementById('newModelApiKey').value = '';
-  document.getElementById('newModelIdDisplay').textContent = '';
   window._editingIdx = undefined;
 }
 function editCustomModel(i) {
   const m = customModels[i];
   document.getElementById('newModelName').value = m.id;
-  document.getElementById('newModelIdDisplay').textContent = 'ID: ' + m.id;
   document.getElementById('newModelDisplayName').value = m.display_name||'';
   document.getElementById('newModelUrl').value = m.base_url||m.url||'';
   document.getElementById('newModelFormat').value = (m.endpoint||'').includes('messages') ? 'anthropic' : 'openai';
+  document.getElementById('newModelUpstream').value = m.model||m.upstream_model||'';
   document.getElementById('newModelApiKey').value = m.api_key||'';
   window._editingIdx = i;
 }
@@ -1529,22 +1568,25 @@ function saveCustomModal() {
   const display = document.getElementById('newModelDisplayName').value.trim();
   const url = document.getElementById('newModelUrl').value.trim();
   const fmt = document.getElementById('newModelFormat').value;
+  const upstream = document.getElementById('newModelUpstream').value.trim();
   const ak = document.getElementById('newModelApiKey').value.trim();
   const ep = fmt === 'anthropic' ? '/v1/messages' : '/v1/chat/completions';
   if (!display) return;
+  const data = {display_name: display, base_url: url, endpoint: ep, model: upstream, api_key: ak};
   // 编辑已有模型
   if (window._editingIdx !== undefined && window._editingIdx < customModels.length) {
-    customModels[window._editingIdx] = {id: customModels[window._editingIdx].id, display_name: display, base_url: url, endpoint: ep, api_key: ak};
+    customModels[window._editingIdx] = Object.assign({id: customModels[window._editingIdx].id}, data);
     window._editingIdx = undefined;
   } else {
-    customModels.push({id: generateModelId(display), display_name: display, base_url: url, endpoint: ep, api_key: ak});
+    data.id = generateModelId(display);
+    customModels.push(data);
   }
   api('PUT','/api/custom-models', customModels).then(() => {
     document.getElementById('newModelName').value = '';
     document.getElementById('newModelDisplayName').value = '';
     document.getElementById('newModelUrl').value = '';
+    document.getElementById('newModelUpstream').value = '';
     document.getElementById('newModelApiKey').value = '';
-    document.getElementById('newModelIdDisplay').textContent = '';
     closeModal('customModal');
     renderCustomModels();
     load();
