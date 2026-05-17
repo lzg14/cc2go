@@ -1497,12 +1497,18 @@ async function autoRefresh() {
     const cfg = await api('GET','/api/config');
     if (cfg.selected_model !== _lastModel) {
       _lastModel = cfg.selected_model || '';
-      await loadCustomModels();
-      await load();
+      await load();  // load() 已包含模型列表渲染
     }
   } catch(e) {}
 }
-setTimeout(() => { _pollTimer = setInterval(autoRefresh, 10000); }, 5000);
+function startPolling() {
+  if (_pollTimer) clearInterval(_pollTimer);
+  _pollTimer = setInterval(autoRefresh, 10000);
+}
+setTimeout(startPolling, 5000);
+window.addEventListener('beforeunload', () => {
+  if (_pollTimer) clearInterval(_pollTimer);
+});
 </script>
 </body>
 </html>"""
