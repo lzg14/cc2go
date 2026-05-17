@@ -21,7 +21,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-VERSION = "1.0.0"
+VERSION = "0.5.0"
 
 # ============ 配置 ============
 DEFAULT_MODELS = {
@@ -203,7 +203,12 @@ def convert_anthropic_messages_to_openai(messages: List[Dict]) -> List[Dict]:
 
                 elif item_type == "tool_use":
                     tool_data = item.get("tool_use") or item
-                    tool_id = tool_data.get("id", f"tc_{idx}_{len(tool_calls_list)}")
+                    tool_id = (
+                        tool_data.get("id")
+                        or tool_data.get("tool_use_id")
+                        or tool_data.get("call_id")
+                        or f"tc_{idx}_{len(tool_calls_list)}"
+                    )
                     tool_calls_list.append({
                         "id": tool_id,
                         "type": "function",
@@ -224,7 +229,12 @@ def convert_anthropic_messages_to_openai(messages: List[Dict]) -> List[Dict]:
                                 text_parts_result.append(part.get("text", ""))
                         result_content = "\n".join(text_parts_result)
 
-                    tool_use_id = tool_data.get("tool_use_id", f"tc_{idx}_{len(tool_results)}")
+                    tool_use_id = (
+                        tool_data.get("tool_use_id")
+                        or tool_data.get("tool_call_id")
+                        or tool_data.get("id")
+                        or f"tc_{idx}_{len(tool_results)}"
+                    )
                     tool_results.append({
                         "role": "tool",
                         "tool_call_id": tool_use_id,
@@ -343,9 +353,15 @@ def convert_response_to_anthropic(result: Dict, model: str) -> Dict:
     if tool_calls:
         for tc in tool_calls:
             func = tc.get("function", {})
+            call_id = (
+                tc.get("id")
+                or tc.get("tool_call_id")
+                or tc.get("call_id")
+                or f"tc_{int(time.time() * 1000)}"
+            )
             content_items.append({
                 "type": "tool_use",
-                "id": tc.get("id", f"tc_{int(time.time() * 1000)}"),
+                "id": call_id,
                 "name": func.get("name", ""),
                 "input": json.loads(func.get("arguments", "{}")) if isinstance(func.get("arguments"), str) else func.get("arguments", {})
             })
