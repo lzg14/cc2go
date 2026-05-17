@@ -34,6 +34,29 @@ def get_base_dir():
 for _rd in ("data", "logs"):
     os.makedirs(os.path.join(get_base_dir(), _rd), exist_ok=True)
 
+# 错误现场归档
+ERROR_ARCHIVE_DIR = os.path.join(get_base_dir(), "error-archive")
+
+
+def save_error_archive(timestamp, model, request_body, openai_payload, response_text, status_code):
+    """400 错误时自动保存完整上下文到 error-archive/，便于事后复盘"""
+    os.makedirs(ERROR_ARCHIVE_DIR, exist_ok=True)
+    safe_ts = timestamp.replace(":", "").replace("/", "-")
+    path = os.path.join(ERROR_ARCHIVE_DIR, f"{safe_ts}-{model}-{status_code}.json")
+    try:
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump({
+                "timestamp": timestamp,
+                "model": model,
+                "status": status_code,
+                "anthropic_request": request_body,
+                "openai_request": openai_payload,
+                "upstream_response": response_text,
+            }, f, ensure_ascii=False, indent=2)
+        logger.info(f"[Error Archive] 已保存错误现场: {os.path.basename(path)}")
+    except Exception as e:
+        logger.warning(f"[Error Archive] 归档失败: {e}")
+
 
 VERSION = "0.5.0"
 
@@ -85,7 +108,10 @@ class Config:
         self.max_retry = int(os.getenv("MAX_RETRY", "3"))
         self.retry_delay = float(os.getenv("RETRY_DELAY", "1.0"))
         self.log_level = os.getenv("LOG_LEVEL", "INFO")
-        self.log_file = os.getenv("LOG_FILE", os.path.join(get_base_dir(), "logs", "router.log"))
+        _log_file = os.getenv("LOG_FILE", os.path.join(get_base_dir(), "logs", "router.log"))
+        if not os.path.isabs(_log_file):
+            _log_file = os.path.join(get_base_dir(), _log_file)
+        self.log_file = _log_file
         self.disable_thinking = os.getenv("DISABLE_THINKING", "true").lower() == "true"
         self.detailed_logging = os.getenv("DETAILED_LOGGING", "true").lower() == "true"
         self.selected_model = os.getenv("SELECTED_MODEL", "")
@@ -230,6 +256,8 @@ def convert_anthropic_messages_to_openai(messages: List[Dict]) -> List[Dict]:
                             "arguments": json.dumps(tool_data.get("input", {}), ensure_ascii=False)
                         }
                     })
+                    if config.detailed_logging:
+                        logger.debug(f"[Tool] id={tool_id}, name={tool_data.get('name', '')}")
 
                 elif item_type == "tool_result":
                     tool_data = item.get("tool_result") or item
@@ -485,6 +513,10 @@ async def anthropic_messages(request: Request):
             raw_text = response.text
             if response.status_code != 200:
                 logger.error(f"[Passthrough] {model_name} status={response.status_code}: {raw_text[:500]}")
+                if response.status_code == 400:
+                    save_error_archive(
+                        datetime.now().isoformat(), model_name, body, None, raw_text, response.status_code
+                    )
                 raise HTTPException(status_code=response.status_code, detail=raw_text[:2000])
             if config.detailed_logging:
                 logger.info(f"[Raw Response] model={model_name}, body={raw_text[:2000]}")
@@ -497,12 +529,18 @@ async def anthropic_messages(request: Request):
         # MiniMax 用 /v1/messages 端点
         if endpoint == "/v1/messages":
             body["thinking"] = {"type": "disabled"}
+            if config.detailed_logging:
+                logger.debug(f"[MiniMax Payload] {json.dumps(body, ensure_ascii=False)[:1000]}")
             logger.debug(f"[Payload] Direct forward to {endpoint} with thinking disabled")
             response = await call_opencode(endpoint, body, api_key=custom_key, base_url=custom_base)
 
             if response.status_code != 200:
                 error_detail = response.text
                 logger.error(f"[Error] OpenCode API status={response.status_code}: {error_detail[:500]}")
+                if response.status_code == 400:
+                    save_error_archive(
+                        datetime.now().isoformat(), model_name, body, None, error_detail, response.status_code
+                    )
                 raise HTTPException(status_code=response.status_code, detail=error_detail)
 
             raw_text = response.text
@@ -554,6 +592,10 @@ async def anthropic_messages(request: Request):
 
         if response.status_code != 200:
             logger.error(f"[Error] OpenCode API: status={response.status_code}, body={raw_text[:2000]}")
+            if response.status_code == 400:
+                save_error_archive(
+                    datetime.now().isoformat(), model_name, body, openai_payload, raw_text, response.status_code
+                )
             raise HTTPException(status_code=response.status_code, detail=raw_text[:2000])
 
         # 转换响应

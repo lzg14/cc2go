@@ -17,6 +17,7 @@ env/
 # 运行时数据
 data/
 logs/
+error-archive/
 
 # 环境配置（包含密钥）
 .env
