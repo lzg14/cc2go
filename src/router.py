@@ -88,6 +88,10 @@ DEFAULT_MODELS = {
     "mimo-v2.5-pro": {"id": "mimo-v2.5-pro", "endpoint": "/v1/chat/completions"},
     "minimax-m2.7": {"id": "minimax-m2.7", "endpoint": "/v1/messages"},
     "minimax-m2.5": {"id": "minimax-m2.5", "endpoint": "/v1/messages"},
+    "deepseek-v4-flash-free": {"id": "deepseek-v4-flash-free", "endpoint": "/v1/chat/completions"},
+    "minimax-m2.5-free": {"id": "minimax-m2.5-free", "endpoint": "/v1/chat/completions"},
+    "nemotron-3-super-free": {"id": "nemotron-3-super-free", "endpoint": "/v1/chat/completions"},
+    "big-pickle": {"id": "big-pickle", "endpoint": "/v1/chat/completions"},
 }
 
 CUSTOM_MODELS_FILE = os.path.join(get_base_dir(), "data", "custom_models.json")
