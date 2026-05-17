@@ -282,6 +282,9 @@ def convert_anthropic_messages_to_openai(messages: List[Dict]) -> List[Dict]:
                         "content": str(result_content) if result_content else ""
                     })
 
+            # 添加 tool 结果（必须在用户文本之前，满足 OpenAI tool 消息紧跟 tool_calls 的要求）
+            openai_messages.extend(tool_results)
+
             # 合并 content_items 和 tool_calls 到一条消息
             if content_items or tool_calls_list:
                 msg_dict = {"role": role}
@@ -298,9 +301,6 @@ def convert_anthropic_messages_to_openai(messages: List[Dict]) -> List[Dict]:
                 if reasoning_extra:
                     msg_dict["reasoning_content"] = reasoning_extra
                 openai_messages.append(msg_dict)
-
-            # 添加 tool 结果
-            openai_messages.extend(tool_results)
 
         elif content:
             c = strip_system_reminder(content)
