@@ -113,7 +113,7 @@ def classify_and_suggest_action(
     elif error_type == ErrorType.AUTH_ERROR:
         return (
             RetryStrategy.FAIL_FAST,
-            f"[AuthError] {status_code} — 检查 API Key: {error_msg[:100]}",
+            f"[AuthError] {status_code} — 认证失败，请检查 API Key 配置",
             None
         )
     else:

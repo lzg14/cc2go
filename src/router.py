@@ -161,6 +161,15 @@ logger = setup_logger()
 # ============ FastAPI ============
 app = FastAPI(title="cc2go", description="Claude Code → OpenCode Go 格式适配器")
 
+# 所有 API 响应禁用浏览器缓存
+@app.middleware("http")
+async def add_nocache_headers(request, call_next):
+    resp = await call_next(request)
+    resp.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+    resp.headers["Pragma"] = "no-cache"
+    resp.headers["Expires"] = "0"
+    return resp
+
 try:
     _sd = os.path.join(get_base_dir(), "static")
     if os.path.exists(_sd):
