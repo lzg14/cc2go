@@ -1252,6 +1252,7 @@ async function load() {
     const dot = document.getElementById('statusDot');
     dot.className = 'status-dot ok';
     document.getElementById('statusText').textContent = t('running');
+    _lastModel = cfg.selected_model || '';
     toast(t('loaded'));
   } catch(e) {
     const dot = document.getElementById('statusDot');
@@ -1481,6 +1482,20 @@ async function reload() {
 }
 applyLang();
 (async () => { await loadCustomModels(); await load(); })();
+
+let _lastModel = '';
+let _pollTimer = null;
+async function autoRefresh() {
+  try {
+    const cfg = await api('GET','/api/config');
+    if (cfg.selected_model !== _lastModel) {
+      _lastModel = cfg.selected_model || '';
+      await loadCustomModels();
+      await load();
+    }
+  } catch(e) {}
+}
+setTimeout(() => { _pollTimer = setInterval(autoRefresh, 10000); }, 5000);
 </script>
 </body>
 </html>"""

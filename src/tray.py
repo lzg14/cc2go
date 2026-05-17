@@ -61,7 +61,7 @@ def load_icon():
 
 def open_admin():
     url = f"http://127.0.0.1:{config.router_port}"
-    webbrowser.open(url)
+    webbrowser.open(url, new=0)
 
 
 def get_current_model():
@@ -101,7 +101,6 @@ def switch_model(model_name):
 def build_model_menu():
     """构建模型切换子菜单"""
     models = get_models_list()
-    current = get_current_model()
 
     def make_callback(name):
         def cb():
@@ -110,12 +109,11 @@ def build_model_menu():
 
     items = []
     for name in sorted(models):
-        checked = name == current
         items.append(
             pystray.MenuItem(
-                f"● {name}" if checked else name,
+                name,
                 make_callback(name),
-                enabled=True
+                checked=lambda item, n=name: n == get_current_model(),
             )
         )
     return items
