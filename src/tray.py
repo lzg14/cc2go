@@ -84,7 +84,7 @@ def build_tray_menu():
 def quit_app(icon, item):
     icon.stop()
     remove_pid()
-    os._exit(0)
+    sys.exit(0)
 
 
 def run_server():
@@ -94,7 +94,7 @@ def run_server():
         uvicorn.run(app, host=host, port=port, log_level="info")
     except Exception as e:
         logger.error(f"Server error: {e}")
-        os._exit(1)
+        sys.exit(1)
 
 
 def _auto_open_admin():

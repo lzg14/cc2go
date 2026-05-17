@@ -56,14 +56,14 @@ class TestEventBuilders(unittest.TestCase):
         self.assertEqual(result["delta"]["partial_json"], '{"query":"weather"}')
 
     def test_build_message_delta_event(self):
-        result = build_message_delta_event("msg-123", "end_turn")
+        result = build_message_delta_event("end_turn")
         self.assertEqual(result["type"], "message_delta")
-        self.assertEqual(result["stop_reason"], "end_turn")
-        self.assertEqual(result["index"], 0)
+        self.assertEqual(result["delta"]["stop_reason"], "end_turn")
+        self.assertNotIn("index", result)
 
     def test_build_message_delta_event_max_tokens(self):
-        result = build_message_delta_event("msg-123", "max_tokens")
-        self.assertEqual(result["stop_reason"], "max_tokens")
+        result = build_message_delta_event("max_tokens")
+        self.assertEqual(result["delta"]["stop_reason"], "max_tokens")
 
     def test_build_message_stop_event(self):
         result = build_message_stop_event()
@@ -107,7 +107,7 @@ class TestEventSequence(unittest.TestCase):
         events.append(format_sse_event(build_content_block_start(0, "text"), "content_block_start"))
         events.append(format_sse_event(build_content_block_delta(0, "text_delta", "Hello"), "content_block_delta"))
         events.append(format_sse_event(build_content_block_stop(0), "content_block_stop"))
-        events.append(format_sse_event(build_message_delta_event(msg_id, "end_turn"), "message_delta"))
+        events.append(format_sse_event(build_message_delta_event("end_turn"), "message_delta"))
         events.append(format_sse_event(build_message_stop_event(), "message_stop"))
 
         self.assertEqual(len(events), 6)

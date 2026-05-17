@@ -117,7 +117,14 @@ async def handle_mmx_search(tool_name: str, query: str) -> Dict:
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE
         )
-        stdout, stderr = await proc.communicate()
+        try:
+            stdout, stderr = await asyncio.wait_for(
+                proc.communicate(), timeout=30.0
+            )
+        except asyncio.TimeoutError:
+            proc.kill()
+            result["content"] = [{"type": "text", "text": "Search timed out after 30s"}]
+            return result
 
         if proc.returncode != 0:
             err_msg = stderr.decode("utf-8", errors="replace").strip()

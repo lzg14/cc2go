@@ -56,13 +56,14 @@ def build_content_block_stop(index: int) -> Dict:
     return {"type": "content_block_stop", "index": index}
 
 
-def build_message_delta_event(msg_id: str, stop_reason: str = "end_turn", usage: Dict = None) -> Dict:
+def build_message_delta_event(stop_reason: str = "end_turn", usage: Dict = None) -> Dict:
     return {
         "type": "message_delta",
-        "index": 0,
-        "delta": {"stop_sequence": None},
-        "usage": usage or {"input_tokens": 0, "output_tokens": 0},
-        "stop_reason": stop_reason
+        "delta": {
+            "stop_reason": stop_reason,
+            "stop_sequence": None
+        },
+        "usage": usage or {"input_tokens": 0, "output_tokens": 0}
     }
 
 
@@ -156,13 +157,18 @@ async def convert_openai_stream_to_anthropic(
                     "content_block_delta"
                 )
 
-        if finish_reason in ("stop", "length"):
+        if finish_reason in ("stop", "length", "tool_calls"):
             if current_block_type is not None:
                 yield format_sse_event(build_content_block_stop(block_index), "content_block_stop")
-            stop_reason = "end_turn" if finish_reason == "stop" else "max_tokens"
+            stop_reason_map = {
+                "stop": "end_turn",
+                "length": "max_tokens",
+                "tool_calls": "tool_use",
+            }
+            stop_reason = stop_reason_map.get(finish_reason, finish_reason)
             usage = chunk.get("usage", {})
             yield format_sse_event(
-                build_message_delta_event(msg_id, stop_reason, usage),
+                build_message_delta_event(stop_reason, usage),
                 "message_delta"
             )
             yield format_sse_event(build_message_stop_event(), "message_stop")

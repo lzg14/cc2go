@@ -3,7 +3,6 @@
 提供错误分类、指数退避重试、模型切换 fallback
 """
 
-import asyncio
 import json
 import logging
 import random

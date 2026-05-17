@@ -72,7 +72,7 @@ def update_archive_limiter(interval_seconds: int):
     error_archive_limiter.update(max(interval_seconds, 1))
 
 
-VERSION = "0.5.0"
+VERSION = "0.6.0"
 
 # ============ 配置 ============
 DEFAULT_MODELS = {
@@ -190,6 +190,7 @@ except Exception:
 # 请求统计（持久化到文件）
 STATS_FILE = os.path.join(get_base_dir(), "data", "stats.json")
 _stats_dirty = 0
+_stats_lock = threading.Lock()
 
 def load_stats():
     try:
@@ -198,17 +199,43 @@ def load_stats():
     except Exception:
         return {"requests": 0, "errors": 0}
 
-def save_stats(force=False):
+def increment_requests():
+    global request_count
+    with _stats_lock:
+        request_count += 1
+        save_stats_unlocked()
+
+def increment_errors():
+    global error_count
+    with _stats_lock:
+        error_count += 1
+        save_stats_unlocked()
+
+def save_stats_unlocked():
+    """无锁版 save_stats，供内部调用"""
     global _stats_dirty
     try:
         _stats_dirty += 1
-        if not force and _stats_dirty < 10:
+        if _stats_dirty < 10:
             return
         with open(STATS_FILE, "w") as f:
             json.dump({"requests": request_count, "errors": error_count}, f)
         _stats_dirty = 0
     except Exception:
         pass
+
+def save_stats(force=False):
+    global _stats_dirty
+    with _stats_lock:
+        _stats_dirty += 1
+        if not force and _stats_dirty < 10:
+            return
+        try:
+            with open(STATS_FILE, "w") as f:
+                json.dump({"requests": request_count, "errors": error_count}, f)
+            _stats_dirty = 0
+        except Exception:
+            pass
 stats = load_stats()
 request_count = stats["requests"]
 error_count = stats["errors"]
@@ -529,9 +556,10 @@ async def call_opencode(endpoint: str, payload: dict, base_url: str = None, api_
         "x-api-key": key
     }
     fallback_idx = 0  # <-- 初始化在循环外
-    for attempt in range(config.max_retry):
-        try:
-            async with httpx.AsyncClient(timeout=180.0) as client:
+    client = httpx.AsyncClient(timeout=180.0)
+    try:
+        for attempt in range(config.max_retry):
+            try:
                 response = await client.post(url, headers=headers, json=payload)
 
                 if response.status_code == 200:
@@ -578,14 +606,14 @@ async def call_opencode(endpoint: str, payload: dict, base_url: str = None, api_
                     await asyncio.sleep(delay)
                     continue
 
-        except HTTPException:
-            raise
-        except Exception as e:
-            logger.warning(f"Attempt {attempt + 1} error: {e}")
-            if attempt < config.max_retry - 1:
-                await asyncio.sleep(get_backoff_delay(attempt))
-            else:
-                raise HTTPException(status_code=500, detail=str(e))
+            except Exception as e:
+                logger.warning(f"Attempt {attempt + 1} error: {e}")
+                if attempt < config.max_retry - 1:
+                    await asyncio.sleep(get_backoff_delay(attempt))
+                else:
+                    raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        await client.aclose()
 
     raise HTTPException(status_code=500, detail="OpenCode API 调用失败")
 
@@ -697,7 +725,7 @@ async def anthropic_messages(request: Request):
                 result = {"type": "message", "content": [{"type": "text", "text": raw_text}]}
 
             duration = time.time() - start_time
-            request_count += 1; save_stats()
+            increment_requests()
             logger.info(f"[OK] {model_name} ({duration:.2f}s)")
 
             return JSONResponse(content=result)
@@ -770,16 +798,16 @@ async def anthropic_messages(request: Request):
                          f"body={json.dumps(anthropic_response, ensure_ascii=False)[:2000]}")
 
         duration = time.time() - start_time
-        request_count += 1; save_stats()
+        increment_requests()
         logger.info(f"[OK] {model_name} ({duration:.2f}s)")
 
         return JSONResponse(content=anthropic_response)
 
     except HTTPException:
-        error_count += 1; save_stats(force=True)
+        increment_errors()
         raise
     except Exception as e:
-        error_count += 1; save_stats(force=True)
+        increment_errors()
         duration = time.time() - start_time
         logger.error(f"[Error] {e}")
         import traceback
@@ -806,7 +834,7 @@ async def chat_completions(request: Request):
             raise HTTPException(status_code=response.status_code, detail=response.text)
 
         duration = time.time() - start_time
-        request_count += 1; save_stats()
+        increment_requests()
         logger.info(f"[OK] {model} OpenAI format ({duration:.2f}s)")
 
         return JSONResponse(content=response.json())
@@ -905,14 +933,13 @@ def sync_claude_settings():
     try:
         with open(path, "r", encoding="utf-8") as f:
             settings = json.load(f)
+        env = settings.setdefault("env", {})
         if model_name:
             settings["model"] = display_name
-            env = settings.setdefault("env", {})
             env["ANTHROPIC_MODEL"] = display_name
             env["ANTHROPIC_DEFAULT_OPUS_MODEL"] = display_name
             env["ANTHROPIC_DEFAULT_SONNET_MODEL"] = display_name
             env["ANTHROPIC_DEFAULT_HAIKU_MODEL"] = display_name
-        env = settings.setdefault("env", {})
         env["ANTHROPIC_BASE_URL"] = base_url
         env["ANTHROPIC_AUTH_TOKEN"] = auth_token
         with open(path, "w", encoding="utf-8") as f:

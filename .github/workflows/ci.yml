@@ -24,10 +24,9 @@ jobs:
 
     - name: Run tests
       run: |
-        python -c "from src.router import app; print('Import OK')"
-        python -c "from src.router import Config; print('Config OK')"
+        python -m unittest discover -s src -p "*_test.py" -v
 
     - name: Lint
       run: |
         pip install ruff
-        ruff check src/ || true
+        ruff check src/
