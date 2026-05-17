@@ -10,7 +10,7 @@ cd /d "%~dp0"
 
 if not exist .env (
     echo Creating default .env...
-    copy config.yaml.example .env 2>nul || echo Please create .env manually
+    copy .env.example .env 2>nul || echo Please create .env manually
 )
 
 echo Starting server...

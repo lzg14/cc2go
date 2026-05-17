@@ -10,6 +10,8 @@ English / [中文](#中文)
 
 A lightweight proxy that translates [Claude Code](https://claude.ai) (Anthropic Messages API) requests to OpenAI Chat Completions format, routing them to [OpenCode Go](https://opencode.ai) model endpoints. Includes a built-in Web UI for configuration.
 
+> **Core capabilities:** Protocol conversion (Anthropic ↔ OpenAI) — built-in Web UI for one-click model switching with auto-sync to Claude Code — broad model support (GLM, Kimi, Qwen, DeepSeek, MiMo, MiniMax, plus custom passthrough) — full tool call loop handling with thinking mode (reasoning_content) and image conversion. **Direct replacement for cc-switch and similar model switching tools.**
+
 ### Features
 
 - 🔄 **Format conversion** — Anthropic ↔ OpenAI translation (tool_use, tool_result, reasoning_content, images)
@@ -20,14 +22,24 @@ A lightweight proxy that translates [Claude Code](https://claude.ai) (Anthropic 
 - 🖼️ **Image support** — Converts Anthropic image blocks to OpenAI image_url format
 - 🔁 **Auto retry** — Failed requests retry up to 3 times with backoff
 - 📋 **Log management** — Built-in log viewer with rotation (5MB per file, 3 backups)
+- 🖥️ **System tray** — `start_bg.bat` runs in system tray (no terminal), double-click to open admin, right-click to exit
 
 ### Quick Start
 
 ```bash
 pip install -r requirements.txt
-cp config.yaml.example .env   # Edit .env with your API key
+cp .env.example .env   # Edit .env with your API key
 python router.py
 ```
+
+Or use the scripts (Windows):
+```
+start.bat       # Foreground mode (shows terminal)
+start_bg.bat    # Background mode (system tray, no terminal)
+stop.bat        # Stop background process
+```
+
+With `start_bg.bat`, cc2go runs silently in your system tray. Double-click the tray icon to open the admin page, right-click for menu → Exit.
 
 Open `http://localhost:4000` → enter API Key → select a model.
 
@@ -75,6 +87,8 @@ All configuration can be managed via the Web UI (`http://localhost:4000`):
 
 轻量级 AI 模型路由代理，将 Claude Code (Anthropic Messages API) 格式自动转为 OpenAI Chat Completions 格式，桥接到 [OpenCode Go](https://opencode.ai/zh/go) 的模型端点。内置 Web 管理页面，配置更方便。
 
+> **核心作用：** 协议转换（Anthropic ↔ OpenAI）→ 内置 Web 管理页一键切换模型并自动同步 Claude Code 配置 → 支持 GLM / Kimi / Qwen / DeepSeek / MiMo / MiniMax 等主流模型及自定义透传 → 完整处理 tool_use/tool_result 多轮交互与思考模式（reasoning_content）→ 图片格式自动转换。**可直接替代 cc-switch 等模型切换工具。**
+
 ### 特性
 
 - 🔄 **格式转换** — 自动处理 tool_use、tool_result、reasoning_content、图片等格式转换
@@ -85,14 +99,24 @@ All configuration can be managed via the Web UI (`http://localhost:4000`):
 - 🖼️ **图片支持** — Anthropic 图片格式自动转换
 - 🔁 **自动重试** — 请求失败最多重试 3 次
 - 📋 **日志管理** — 内置日志查看器，自动轮转（每文件 5MB，保留 3 份）
+- 🖥️ **系统托盘** — `start_bg.bat` 托盘静默运行，双击图标打开管理页，右键退出
 
 ### 快速开始
 
 ```bash
 pip install -r requirements.txt
-cp config.yaml.example .env   # 编辑 .env 填入 API Key
+cp .env.example .env   # 编辑 .env 填入 API Key
 python router.py
 ```
+
+也可使用脚本启动（Windows）：
+```
+start.bat       # 前台模式（弹出终端窗口）
+start_bg.bat    # 后台托盘模式（不弹窗口，系统托盘运行）
+stop.bat        # 停止后台进程
+```
+
+`start_bg.bat` 启动后会在系统托盘显示图标，双击打开管理页，右键菜单可退出。
 
 打开 `http://localhost:4000` → 填入 API Key → 选择模型即可使用。
 

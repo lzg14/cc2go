@@ -12,7 +12,7 @@ cd "$(dirname "$0")"
 
 if [ ! -f ".env" ]; then
     echo "[配置] .env 不存在，创建默认配置..."
-    cp config.yaml.example .env 2>/dev/null || echo "请手动创建 .env"
+    cp .env.example .env 2>/dev/null || echo "请手动创建 .env"
 fi
 
 echo "[启动] 正在启动 cc2go..."

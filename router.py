@@ -21,6 +21,8 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+VERSION = "1.0.0"
+
 # ============ 配置 ============
 DEFAULT_MODELS = {
     "glm-5.1": {"id": "glm-5.1", "endpoint": "/v1/chat/completions"},
@@ -376,7 +378,7 @@ def convert_response_to_anthropic(result: Dict, model: str) -> Dict:
 
 
 async def call_opencode(endpoint: str, payload: dict, base_url: str = None, api_key: str = None, full_url: str = None) -> httpx.Response:
-    """调用 API，带重试"""
+    """调用 API，带重试。连接异常时重建 client 避免复用坏连接"""
     url = full_url or f"{base_url or config.opencode_base_url}{endpoint}"
     key = api_key or config.opencode_api_key
     headers = {
@@ -384,17 +386,17 @@ async def call_opencode(endpoint: str, payload: dict, base_url: str = None, api_
         "Content-Type": "application/json",
         "x-api-key": key
     }
-    async with httpx.AsyncClient(timeout=180.0) as client:
-        for attempt in range(config.max_retry):
-            try:
+    for attempt in range(config.max_retry):
+        try:
+            async with httpx.AsyncClient(timeout=180.0) as client:
                 response = await client.post(url, headers=headers, json=payload)
                 if response.status_code < 500:
                     return response
                 logger.warning(f"Attempt {attempt + 1} failed: {response.status_code}")
-            except Exception as e:
-                logger.warning(f"Attempt {attempt + 1} error: {e}")
-            if attempt < config.max_retry - 1:
-                await asyncio.sleep(config.retry_delay * (attempt + 1))
+        except Exception as e:
+            logger.warning(f"Attempt {attempt + 1} error: {e}")
+        if attempt < config.max_retry - 1:
+            await asyncio.sleep(config.retry_delay * (attempt + 1))
     raise HTTPException(status_code=500, detail="OpenCode API 调用失败")
 
 
@@ -692,6 +694,7 @@ def sync_claude_settings():
 async def get_config_api():
     """返回当前配置（密钥脱敏）"""
     return {
+        "version": VERSION,
         "opencode_base_url": config.opencode_base_url,
         "opencode_api_key": mask_key(config.opencode_api_key),
         "router_host": config.router_host,
@@ -996,6 +999,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','SF Pro Display',sy
 </div></div>
 
 <div style="text-align:center;padding:16px 0 8px;font-size:12px;color:#a1a1a6">
+<span id="versionDisplay"></span>
 <a href="https://github.com/lzg14/cc2go" target="_blank" style="color:#a1a1a6;text-decoration:none">github.com/lzg14/cc2go</a>
 </div>
 
@@ -1167,6 +1171,8 @@ async function load() {
           (isCustom?'<span class="tag-action" onclick="event.stopPropagation();deleteCustomModelById(\''+m+'\')" style="cursor:pointer;color:#ff3b30;font-size:12px;position:absolute;top:2px;right:3px" title="Delete">✕</span>':'')+'</span>';
       }).join('');
     }
+    const vEl = document.getElementById('versionDisplay');
+    if (vEl && cfg.version) vEl.textContent = 'v' + cfg.version + ' · ';
     if (cfg.stats) {
       document.getElementById('statRequests').textContent = cfg.stats.requests;
       document.getElementById('statErrors').textContent = cfg.stats.errors;
@@ -1460,7 +1466,7 @@ if __name__ == "__main__":
     refresh_models()
     print()
     print("╔═══════════════════════════════════════════════════════════╗")
-    print("║                    cc2go v2.0.0                         ║")
+    print(f"║                    cc2go v{VERSION}                        ║")
     print("║          Claude Code → OpenCode Go 适配器               ║")
     print("╠═══════════════════════════════════════════════════════════╣")
     print(f"║  监听: http://{config.router_host}:{config.router_port}                              ║")

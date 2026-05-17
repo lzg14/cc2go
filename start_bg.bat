@@ -4,12 +4,13 @@ cd /d "%~dp0"
 
 if not exist .env (
     echo Creating default .env...
-    copy config.yaml.example .env 2>nul
+    copy .env.example .env 2>nul
 )
 
-echo Starting cc2go in background...
-powershell -Command "Start-Process -WindowStyle Hidden -FilePath 'python' -ArgumentList 'router.py' -WorkingDirectory '%~dp0'"
-echo cc2go is running silently in background (PID: unknown).
-echo To stop it, run: stop.bat
+echo Starting cc2go in system tray...
+powershell -Command "Start-Process -WindowStyle Hidden -FilePath 'python' -ArgumentList 'tray.py' -WorkingDirectory '%~dp0'"
+echo cc2go is running in system tray.
+echo To open the admin page, double-click the tray icon.
+echo To stop, run: stop.bat
 echo.
 pause
