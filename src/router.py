@@ -1152,13 +1152,14 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','SF Pro Display',sy
 </div>
 
 <div class="card">
-<h2 data-i18n="model">当前模型</h2>
-<div class="model-list" id="modelList" style="margin-top:8px"></div>
+<div style="margin-top:4px;font-size:12px;color:#86868b;font-weight:500" data-i18n="presetModels">预置模型</div>
+<div class="model-list" id="presetModelList" style="margin-top:4px"></div>
+<div style="margin-top:10px;font-size:12px;color:#86868b;font-weight:500" data-i18n="customModels">自定义模型</div>
+<div class="model-list" id="customModelList2" style="margin-top:4px"></div>
 </div>
 
 <div class="btn-row" style="margin-bottom:6px">
 <button class="btn btn-secondary" onclick="clearCustomModalFields();openModal('customModal')">➕ <span data-i18n="addModel">新增模型</span></button>
-<button class="btn btn-secondary" onclick="editSelectedCustom()">✎ <span data-i18n="editModel">编辑模型</span></button>
 <button class="btn btn-secondary" onclick="fetchModels()">🔄 <span data-i18n="refreshModels">刷新模型</span></button>
 </div>
 <div class="btn-row">
@@ -1203,7 +1204,6 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','SF Pro Display',sy
 
 <div class="modal-overlay" id="customModal">
 <div class="modal" style="padding:28px"><h2 data-i18n="customModels" style="margin-bottom:18px">自定义模型</h2>
-<div id="customModelList" style="margin-bottom:12px"></div>
 <div style="display:flex;flex-direction:column;gap:10px">
 <label data-i18n="modelDisplayName" style="font-size:12px;font-weight:500;color:#6e6e73;margin-bottom:-6px">显示名</label>
 <input id="newModelDisplayName" data-i18n="modelDisplayPlaceholder" placeholder="显示名" style="width:100%;padding:10px 14px;border:1px solid #d2d2d7;border-radius:8px;font-size:15px;box-sizing:border-box">
@@ -1286,6 +1286,7 @@ const I18N = {
     aliasDesc: "留空显示实际模型名。设成视觉模型名（如 claude-sonnet-4-20250514）可让 CC 放开图片发送",
     aliasPlaceholder: "留空=使用实际模型名",
     customModels: "自定义模型",
+    presetModels: "预置模型",
     add: "添加",
     noCustomModels: "暂无自定义模型",
     customAdded: "已添加自定义模型",
@@ -1353,6 +1354,7 @@ const I18N = {
     aliasDesc: "Leave empty to show actual model name. Set to a vision model name (e.g. claude-sonnet-4-20250514) to enable image input in CC.",
     aliasPlaceholder: "Leave empty = use actual model",
     customModels: "Custom Models",
+    presetModels: "Preset Models",
     add: "Add",
     noCustomModels: "No custom models",
     customAdded: "Custom model added",
@@ -1428,18 +1430,28 @@ async function load() {
     document.getElementById('apiKey').value = cfg.opencode_api_key||'';
     syncToModals(cfg);
     const sel = cfg.selected_model||'';
-    const ml = document.getElementById('modelList');
-    if (ml && cfg.models) {
-      const customIds = customModels.map(m => m.id);
-      const isCustom = customIds.includes(sel);
-      const dn = isCustom ? (customModels.find(cm => cm.id === sel)?.display_name || '') : '';
-      ml.innerHTML = cfg.models.map(m => {
-        const isCustom = customIds.includes(m);
-        const dn = isCustom ? (customModels.find(cm => cm.id === m)?.display_name || '') : '';
-        const label = dn || m;
-        return '<span class="model-tag'+(m===sel?' selected':'')+(isCustom?' custom':'')+'" data-model="'+m+'" onclick="selectModel(\''+m.replace(/'/g,"\\'")+'\')" '+(isCustom?'style="position:relative;padding-right:18px"':'')+'>'+label+(isCustom?' <sup style="font-size:10px;opacity:.7">C</sup>':'')+
-          (isCustom?'<span class="tag-action" onclick="event.stopPropagation();deleteCustomModelById(\''+m+'\')" style="cursor:pointer;color:#ff3b30;font-size:12px;position:absolute;top:2px;right:3px" title="Delete">✕</span>':'')+'</span>';
-      }).join('');
+    const customIds = customModels.map(m => m.id);
+    // 预置模型：只能切换
+    const pEl = document.getElementById('presetModelList');
+    if (pEl && cfg.models) {
+      pEl.innerHTML = cfg.models.filter(m => !customIds.includes(m)).map(m =>
+        '<span class="model-tag'+(m===sel?' selected':'')+'" data-model="'+m+'" onclick="selectModel(\''+m.replace(/'/g,"\\'")+'\')">'+m+'</span>'
+      ).join('');
+    }
+    // 自定义模型：切换、编辑、删除
+    const cEl = document.getElementById('customModelList2');
+    if (cEl) {
+      if (!customModels.length) {
+        cEl.innerHTML = '<span style="color:#86868b;font-size:13px" data-i18n="noCustomModels">暂无自定义模型</span>';
+      } else {
+        cEl.innerHTML = customModels.map(m => {
+          const label = m.display_name || m.id;
+          const info = (m.base_url||'') + (m.endpoint||'');
+          return '<span class="model-tag'+(m.id===sel?' selected':'')+' custom" data-model="'+m.id+'" onclick="selectModel(\''+m.id+'\')" style="position:relative;padding-right:18px">' +
+            label+' <sup style="font-size:10px;opacity:.7">C</sup>' +
+            '<span class="tag-action" onclick="event.stopPropagation();deleteCustomModelById(\''+m.id+'\')" style="cursor:pointer;color:#ff3b30;font-size:12px;position:absolute;top:2px;right:3px" title="Delete">✕</span></span>';
+        }).join('');
+      }
     }
     const vEl = document.getElementById('versionDisplay');
     if (vEl && cfg.version) vEl.textContent = 'v' + cfg.version + ' · ';
@@ -1463,40 +1475,7 @@ let customModels = [];
 async function loadCustomModels() {
   try {
     customModels = await api('GET','/api/custom-models');
-    renderCustomModels();
-    // 重新渲染模型标签，应用自定义标记
-    const mlEl = document.getElementById('modelList');
-    if (mlEl && mlEl.children.length) {
-      const customIds = customModels.map(m => m.id);
-      const selectedEl = mlEl.querySelector('.selected');
-      const selId = selectedEl ? selectedEl.getAttribute('data-model') : '';
-      const isCustom = customIds.includes(selId);
-      Array.from(mlEl.children).forEach(el => {
-        const id = el.getAttribute('data-model');
-        if (customIds.includes(id)) {
-          el.classList.add('custom');
-          const dn = customModels.find(m => m.id === id)?.display_name;
-          if (dn && !el.querySelector('sup')) {
-            el.innerHTML = dn + ' <sup style="font-size:10px;opacity:.7">C</sup>';
-          }
-          // 添加编辑/删除按钮
-          if (!el.querySelector('.tag-action')) {
-            const btnStyle = 'position:relative;padding-right:18px';
-            if (!el.style.position) el.style.cssText = btnStyle;
-            el.insertAdjacentHTML('beforeend', '<span class="tag-action" onclick="event.stopPropagation();deleteCustomModelById(\''+id+'\')" style="cursor:pointer;color:#ff3b30;font-size:12px;position:absolute;top:2px;right:3px" title="Delete">✕</span>');
-          }
-        }
-      });
-    }
   } catch(e) {}
-}
-function renderCustomModels() {
-  const el = document.getElementById('customModelList');
-  if (!customModels.length) { el.innerHTML = ''; return; }
-  el.innerHTML = customModels.map((m,i) => '<div style="display:flex;align-items:center;gap:6px;background:#f0f0f5;padding:6px 10px;border-radius:8px;margin:4px 0;font-size:13px">'+
-    '<span style="flex:1;min-width:0">'+(m.display_name||m.id)+'<span style="color:#86868b;font-size:11px;margin-left:6px">'+((m.base_url||m.url||'')+(m.endpoint||''))+'</span></span>'+
-    '<span onclick="editCustomModel('+i+')" style="cursor:pointer;color:#0071e3;font-size:12px;white-space:nowrap">编辑</span>'+
-    '<span onclick="deleteCustomModel('+i+')" style="cursor:pointer;color:#ff3b30;font-size:12px;white-space:nowrap">删除</span></div>').join('');
 }
 function clearCustomModalFields() {
   document.getElementById('newModelName').value = '';
@@ -1519,7 +1498,6 @@ function editCustomModel(i) {
 async function deleteCustomModel(i) {
   customModels.splice(i, 1);
   await api('PUT','/api/custom-models', customModels);
-  renderCustomModels();
   await load();
   toast(t('customDeleted'));
 }
@@ -1625,7 +1603,6 @@ function saveCustomModal() {
     document.getElementById('newModelUpstream').value = '';
     document.getElementById('newModelApiKey').value = '';
     closeModal('customModal');
-    renderCustomModels();
     load();
     toast(t('saved'));
   }).catch(e => toast(t('savefail')+': '+e.message, false));
@@ -1642,7 +1619,6 @@ function deleteCustomModelById(id) {
   showConfirm('删除自定义模型「'+(customModels[i].display_name||id)+'」？', () => {
     customModels.splice(i, 1);
     api('PUT','/api/custom-models', customModels).then(() => {
-      renderCustomModels();
       load();
       toast(t('customDeleted'));
     });
@@ -1656,29 +1632,6 @@ function showConfirm(msg, cb) {
   document.getElementById('confirmModal').classList.add('open');
 }
 function closeConfirm() { document.getElementById('confirmModal').classList.remove('open'); }
-function editSelectedCustom() {
-  const sel = document.querySelector('#modelList .model-tag.selected');
-  if (!sel) { clearCustomModalFields(); openModal('customModal'); return; }
-  const id = sel.getAttribute('data-model');
-  const i = customModels.findIndex(m => m.id === id);
-  if (i === -1) { clearCustomModalFields(); openModal('customModal'); return; }
-  editCustomModel(i);
-  openModal('customModal');
-}
-function deleteSelectedCustom() {
-  const sel = document.querySelector('#modelList .model-tag.selected');
-  if (!sel) return;
-  const id = sel.getAttribute('data-model');
-  const idx = customModels.findIndex(m => m.id === id);
-  if (idx === -1) return;
-  if (!confirm('删除自定义模型「'+(customModels[idx].display_name||id)+'」？')) return;
-  customModels.splice(idx, 1);
-  api('PUT','/api/custom-models', customModels).then(() => {
-    renderCustomModels();
-    load();
-    toast(t('customDeleted'));
-  });
-}
 async function reload() {
   try {
     await api('POST','/reload');
