@@ -1045,10 +1045,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','SF Pro Display',sy
 <div style="display:flex;gap:12px;margin-bottom:12px;flex-wrap:wrap">
 <div style="flex:1;min-width:140px">
 <label data-i18n="logLevel" style="display:block;font-size:12px;font-weight:500;color:#6e6e73;margin-bottom:4px">日志级别</label>
-<select id="logLevel2" style="width:100%;padding:8px 10px;border:1px solid #d2d2d7;border-radius:8px;font-size:13px;background:#fff;box-sizing:border-box"><option>DEBUG</option><option selected>INFO</option><option>WARNING</option><option>ERROR</option></select>
+<select id="logLevelLogs" onchange="saveLogSettings()" style="width:100%;padding:8px 10px;border:1px solid #d2d2d7;border-radius:8px;font-size:13px;background:#fff;box-sizing:border-box"><option>DEBUG</option><option selected>INFO</option><option>WARNING</option><option>ERROR</option></select>
 </div>
 <div style="display:flex;align-items:flex-end;gap:12px;padding-bottom:4px">
-<div class="checkbox-row"><input id="detailedLogging2" type="checkbox"><label for="detailedLogging2" data-i18n="detailedLogging">记录详细日志</label></div>
+<div class="checkbox-row"><input id="detailedLoggingLogs" type="checkbox" onchange="saveLogSettings()"><label for="detailedLoggingLogs" data-i18n="detailedLogging">记录详细日志</label></div>
 </div>
 </div>
 <div style="display:flex;gap:8px;margin-bottom:8px">
@@ -1345,26 +1345,33 @@ function syncToModals(cfg) {
   setChecked('disableThinking2', cfg.disable_thinking);
   setChecked('detailedLogging2', cfg.detailed_logging);
   setVal('claudeAlias2', cfg.claude_model_alias);
+  setVal('logLevelLogs', cfg.log_level);
+  setChecked('detailedLoggingLogs', cfg.detailed_logging);
 }
 function setVal(id, v) { const el = document.getElementById(id); if (el) el.value = v||''; }
 function setChecked(id, v) { const el = document.getElementById(id); if (el) el.checked = v!==false; }
 function saveServiceModal() { closeModal('serviceModal'); save(); }
 function saveAdvancedModal() { closeModal('advancedModal'); save(); }
 function saveAliasModal() { closeModal('aliasModal'); save(); }
-async function save() {
-  const body = {
-    opencode_base_url: document.getElementById('baseUrl').value,
-    opencode_api_key: document.getElementById('apiKey').value,
-    router_host: getVal('host2'),
-    router_port: parseInt(getVal('port2'))||4000,
-    master_key: getVal('masterKey2'),
-    max_retry: parseInt(getVal('maxRetry2'))||3,
-    retry_delay: parseFloat(getVal('retryDelay2'))||1,
-    log_level: getVal('logLevel2')||'INFO',
-    disable_thinking: getChecked('disableThinking2'),
-    detailed_logging: getChecked('detailedLogging2'),
-    claude_model_alias: getVal('claudeAlias2'),
-  };
+function saveLogSettings() { save(['log_level','detailed_logging']); }
+async function save(keys) {
+  const body = {};
+  if (!keys) {
+    body.opencode_base_url = document.getElementById('baseUrl').value;
+    body.opencode_api_key = document.getElementById('apiKey').value;
+    body.router_host = getVal('host2');
+    body.router_port = parseInt(getVal('port2'))||4000;
+    body.master_key = getVal('masterKey2');
+    body.max_retry = parseInt(getVal('maxRetry2'))||3;
+    body.retry_delay = parseFloat(getVal('retryDelay2'))||1;
+    body.log_level = getVal('logLevel2')||'INFO';
+    body.disable_thinking = getChecked('disableThinking2');
+    body.detailed_logging = getChecked('detailedLogging2');
+    body.claude_model_alias = getVal('claudeAlias2');
+  } else {
+    if (keys.includes('log_level')) body.log_level = getVal('logLevelLogs')||'INFO';
+    if (keys.includes('detailed_logging')) body.detailed_logging = getChecked('detailedLoggingLogs');
+  }
   try {
     const r = await api('PUT','/api/config', body);
     toast(t('saved'));
