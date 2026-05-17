@@ -256,6 +256,34 @@ def convert_anthropic_messages_to_openai(messages: List[Dict]) -> List[Dict]:
         role = msg.get("role", "user")
         content = msg.get("content", "")
 
+        # 检查消息顶层是否已携带 OpenAI 格式字段（兼容半转换消息）
+        top_tool_calls = msg.get("tool_calls")
+        top_reasoning = msg.get("reasoning_content")
+        top_tool_call_id = msg.get("tool_call_id")
+
+        # 处理已是 OpenAI 格式的 tool 消息（role=tool + tool_call_id）
+        if role == "tool" and top_tool_call_id:
+            openai_messages.append({
+                "role": "tool",
+                "tool_call_id": top_tool_call_id,
+                "content": content if isinstance(content, str) else str(content),
+            })
+            continue
+
+        # 处理已是 OpenAI 格式的 assistant 消息（带顶层 tool_calls 或 reasoning_content）
+        if (isinstance(content, str) or content is None) and (top_tool_calls or top_reasoning is not None):
+            result = {"role": role}
+            c = content if content else None
+            if c is not None and role == "assistant":
+                c = strip_reasoning(strip_system_reminder(c))
+            result["content"] = c
+            if top_tool_calls:
+                result["tool_calls"] = top_tool_calls
+            if top_reasoning:
+                result["reasoning_content"] = top_reasoning
+            openai_messages.append(result)
+            continue
+
         # 处理 Claude 的 content 数组结构
         if isinstance(content, list):
             content_items = []  # [{type, text/url}, ...]
@@ -356,10 +384,14 @@ def convert_anthropic_messages_to_openai(messages: List[Dict]) -> List[Dict]:
                 # content 数组处理后没有任何产出（如 user 消息仅含 thinking 块），且无 tool_result
                 openai_messages.append({"role": role, "content": ""})
 
-        elif content:
-            c = strip_system_reminder(content)
-            if role == "assistant":
-                c = strip_reasoning(c)
+        elif content is not None:
+            # content="" 不应被丢弃：assistant 空 content 消息在多轮 tool_use 对话中常见，
+            # 丢弃会导致 DeepSeek 等 API 报错 "reasoning_content must be passed back"
+            c = content
+            if c:
+                c = strip_system_reminder(c)
+                if role == "assistant":
+                    c = strip_reasoning(c)
             openai_messages.append({"role": role, "content": c})
 
     return openai_messages
@@ -1171,6 +1203,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','SF Pro Display',sy
 
 <div class="modal-overlay" id="customModal">
 <div class="modal" style="padding:28px"><h2 data-i18n="customModels" style="margin-bottom:18px">自定义模型</h2>
+<div id="customModelList" style="margin-bottom:12px"></div>
 <div style="display:flex;flex-direction:column;gap:10px">
 <label data-i18n="modelDisplayName" style="font-size:12px;font-weight:500;color:#6e6e73;margin-bottom:-6px">显示名</label>
 <input id="newModelDisplayName" data-i18n="modelDisplayPlaceholder" placeholder="显示名" style="width:100%;padding:10px 14px;border:1px solid #d2d2d7;border-radius:8px;font-size:15px;box-sizing:border-box">
