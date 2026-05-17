@@ -205,13 +205,64 @@ class TestConvertMessages(unittest.TestCase):
             {"role": "assistant", "content": [{"type": "text", "text": "Found the files"}]}
         ]
         result = convert_anthropic_messages_to_openai(messages)
-        # 应该有 4 条消息，assistant 空 content 那条不应被丢弃
         self.assertEqual(len(result), 4, "4条消息都应保留，assistant 空 content 不应被丢弃")
         self.assertEqual(result[0]["role"], "user")
         self.assertEqual(result[1]["role"], "assistant")
         self.assertIn("tool_calls", result[1])
         self.assertEqual(result[2]["role"], "tool")
         self.assertEqual(result[3]["role"], "assistant")
+
+    def test_tool_calls_requires_reasoning_content_openai_format(self):
+        """OpenAI 格式: assistant + tool_calls 但无 reasoning_content 时自动补空字符串"""
+        messages = [{
+            "role": "assistant",
+            "content": None,
+            "tool_calls": [
+                {"id": "call_00", "type": "function", "function": {"name": "bash", "arguments": "{}"}}
+            ]
+        }]
+        result = convert_anthropic_messages_to_openai(messages)
+        self.assertEqual(len(result), 1)
+        self.assertIn("reasoning_content", result[0])
+        self.assertEqual(result[0]["reasoning_content"], "")
+
+    def test_tool_calls_keeps_existing_reasoning_content(self):
+        """OpenAI 格式: assistant + tool_calls + reasoning_content 保留原值"""
+        messages = [{
+            "role": "assistant",
+            "content": None,
+            "tool_calls": [
+                {"id": "call_00", "type": "function", "function": {"name": "bash", "arguments": "{}"}}
+            ],
+            "reasoning_content": "I need to check the files"
+        }]
+        result = convert_anthropic_messages_to_openai(messages)
+        self.assertEqual(result[0]["reasoning_content"], "I need to check the files")
+
+    def test_anthropic_tool_use_without_thinking_adds_reasoning_content(self):
+        """Anthropic 格式: assistant content 数组只有 tool_use 没有 thinking 时自动补 reasoning_content"""
+        messages = [{
+            "role": "assistant",
+            "content": [
+                {"type": "tool_use", "id": "call_abc", "name": "read", "input": {"path": "/tmp/f"}}
+            ]
+        }]
+        result = convert_anthropic_messages_to_openai(messages)
+        self.assertEqual(len(result), 1)
+        self.assertIn("reasoning_content", result[0])
+        self.assertEqual(result[0]["reasoning_content"], "")
+
+    def test_anthropic_tool_use_with_thinking_keeps_reasoning(self):
+        """Anthropic 格式: assistant content 有 thinking + tool_use 时保留 reasoning_content"""
+        messages = [{
+            "role": "assistant",
+            "content": [
+                {"type": "thinking", "thinking": "Let me read the file"},
+                {"type": "tool_use", "id": "call_abc", "name": "read", "input": {"path": "/tmp/f"}}
+            ]
+        }]
+        result = convert_anthropic_messages_to_openai(messages)
+        self.assertEqual(result[0]["reasoning_content"], "Let me read the file")
 
 
 if __name__ == "__main__":

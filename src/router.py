@@ -88,10 +88,6 @@ DEFAULT_MODELS = {
     "mimo-v2.5-pro": {"id": "mimo-v2.5-pro", "endpoint": "/v1/chat/completions"},
     "minimax-m2.7": {"id": "minimax-m2.7", "endpoint": "/v1/messages"},
     "minimax-m2.5": {"id": "minimax-m2.5", "endpoint": "/v1/messages"},
-    "deepseek-v4-flash-free": {"id": "deepseek-v4-flash-free", "endpoint": "/v1/chat/completions"},
-    "minimax-m2.5-free": {"id": "minimax-m2.5-free", "endpoint": "/v1/chat/completions"},
-    "nemotron-3-super-free": {"id": "nemotron-3-super-free", "endpoint": "/v1/chat/completions"},
-    "big-pickle": {"id": "big-pickle", "endpoint": "/v1/chat/completions"},
 }
 
 CUSTOM_MODELS_FILE = os.path.join(get_base_dir(), "data", "custom_models.json")
@@ -283,6 +279,8 @@ def convert_anthropic_messages_to_openai(messages: List[Dict]) -> List[Dict]:
             result["content"] = c
             if top_tool_calls:
                 result["tool_calls"] = top_tool_calls
+                if top_reasoning is None and role == "assistant":
+                    result["reasoning_content"] = ""
             if top_reasoning:
                 result["reasoning_content"] = top_reasoning
             openai_messages.append(result)
@@ -381,8 +379,10 @@ def convert_anthropic_messages_to_openai(messages: List[Dict]) -> List[Dict]:
                     msg_dict["content"] = None
                 if tool_calls_list:
                     msg_dict["tool_calls"] = tool_calls_list
-                if reasoning_content:
+                if reasoning_content is not None:
                     msg_dict["reasoning_content"] = reasoning_content
+                elif tool_calls_list and role == "assistant":
+                    msg_dict["reasoning_content"] = ""
                 openai_messages.append(msg_dict)
             elif isinstance(content, list) and not tool_results:
                 # content 数组处理后没有任何产出（如 user 消息仅含 thinking 块），且无 tool_result
@@ -1028,10 +1028,6 @@ async def open_folder(data: dict = Body(...)):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.post("/api/refresh-models")
-async def refresh_models_api():
-    refresh_models()
-    return {"status": "ok", "models": sorted(config.models.keys())}
 
 
 @app.get("/api/custom-models")
@@ -1042,7 +1038,7 @@ async def get_custom_models():
 @app.put("/api/custom-models")
 async def save_custom_models_api(models: list = Body(...)):
     save_custom_models(models)
-    refresh_models()
+    config.models = merge_models(DEFAULT_MODELS, load_custom_models())
     return {"status": "ok", "count": len(models)}
 
 
@@ -1165,7 +1161,6 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','SF Pro Display',sy
 <div class="btn-row" style="margin-bottom:6px">
 <button class="btn btn-secondary" onclick="clearCustomModalFields();openModal('customModal')">➕ <span data-i18n="addModel">新增模型</span></button>
 <button class="btn btn-secondary" onclick="editSelectedCustom()">✎ <span data-i18n="editModel">编辑模型</span></button>
-<button class="btn btn-secondary" onclick="fetchModels()">🔄 <span data-i18n="refreshModels">刷新模型</span></button>
 </div>
 <div class="btn-row">
 <button class="btn btn-secondary" onclick="openModal('connModal')">🔗 <span data-i18n="opencode">连接</span></button>
@@ -1325,8 +1320,6 @@ const I18N = {
     modelUpstreamPlaceholder: "上游模型名（留空使用 ID）",
     modelKeyPlaceholder: "API Key（留空使用全局）",
     getKey: "获取 Key",
-    refreshModels: "刷新模型列表",
-    refreshModelsDone: "模型列表已更新",
   },
   en: {
     opencode: "Go Connection",
@@ -1393,8 +1386,6 @@ const I18N = {
     modelUpstreamPlaceholder: "Upstream model name (leave empty = use ID)",
     modelKeyPlaceholder: "API Key (leave empty = use global)",
     getKey: "Get Key",
-    refreshModels: "Refresh model list",
-    refreshModelsDone: "Model list updated",
   },
 };
 function t(key) { return (I18N[_lang]||I18N.zh)[key]||key; }
@@ -1506,16 +1497,6 @@ async function deleteCustomModel(i) {
   toast(t('customDeleted'));
 }
 function saveConnModal() { closeModal('connModal'); save(); }
-async function fetchModels() {
-  toast(t('refreshModels')+'...');
-  try {
-    await api('POST','/api/refresh-models');
-    await load();
-    toast(t('refreshModelsDone'));
-  } catch(e) {
-    toast(t('savefail')+': '+e.message, false);
-  }
-}
 function openModal(id) {
   document.getElementById(id).classList.add('open');
   document.getElementById(id).classList.add('open');
@@ -1662,52 +1643,8 @@ applyLang();
 </html>"""
 
 # ============ 启动 ============
-def refresh_models():
-    """从上游拉取模型列表，成功则缓存到本地，失败用缓存或默认"""
-    cache_file = os.path.join(get_base_dir(), "data", "models_cache.json")
-    url = f"{config.opencode_base_url}/v1/models"
-    headers = {
-        "Authorization": f"Bearer {config.opencode_api_key}",
-        "x-api-key": config.opencode_api_key,
-    }
-    try:
-        with httpx.Client(timeout=10) as client:
-            resp = client.get(url, headers=headers)
-            if resp.status_code == 200:
-                data = resp.json()
-                ids = [m["id"] for m in data.get("data", [])]
-                if ids:
-                    new_models = {}
-                    for mid in ids:
-                        ep = "/v1/messages" if mid.startswith("minimax") else "/v1/chat/completions"
-                        new_models[mid] = {"id": mid, "endpoint": ep}
-                    custom = load_custom_models()
-                    config.models = merge_models(new_models, custom)
-                    with open(cache_file, "w") as f:
-                        json.dump(ids, f)
-                    logger.info(f"[Models] 从上游加载 {len(new_models)} 个模型 + {len(custom)} 个自定义")
-                    return
-    except Exception as e:
-        logger.warning(f"[Models] 上游拉取失败: {e}")
-    # 失败时读缓存
-    try:
-        with open(cache_file, "r") as f:
-            ids = json.load(f)
-            if ids:
-                cached = {}
-                for mid in ids:
-                    ep = "/v1/messages" if mid.startswith("minimax") else "/v1/chat/completions"
-                    cached[mid] = {"id": mid, "endpoint": ep}
-                config.models = merge_models(cached, load_custom_models())
-                logger.info(f"[Models] 从缓存加载 {len(cached)} 个模型")
-                return
-    except Exception:
-        pass
-    # 最终兜底：默认列表
-    config.models = merge_models(DEFAULT_MODELS, load_custom_models())
-
 if __name__ == "__main__":
-    refresh_models()
+    config.models = merge_models(DEFAULT_MODELS, load_custom_models())
     print()
     print("╔═══════════════════════════════════════════════════════════╗")
     version_str = f"cc2go v{VERSION}"
