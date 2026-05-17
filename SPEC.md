@@ -57,6 +57,7 @@ git push && git push --tags
 | 版本 | 日期 | 主要变更 |
 |------|------|---------|
 | 0.5.0 | 2026-05-17 | 初始开发：格式转换、系统托盘、打包脚本、工具调用循环 |
+| 0.5.0+ | 2026-05-17 | 新增：流式 SSE 转换（streaming.py）、MCP web_search 短路（mcp_bypass.py）、错误分类与自适应重试（error_handler.py）、自定义模型 display_name 支持、auto-ID 生成、output_config 修复、Cache-Control 缓存防过期、mmx Windows 路径修复、54 个单元测试 |
 
 
 ## 项目目录结构
@@ -64,8 +65,14 @@ git push && git push --tags
 ```
 cc2go/
 ├── src/                    # 源码
-│   ├── router.py           # 主服务 (FastAPI)
-│   └── tray.py             # 系统托盘 (pystray)
+│   ├── router.py           # 主服务：格式转换 + API 端点 + Web UI
+│   ├── tray.py             # 系统托盘 (pystray)
+│   ├── streaming.py        # 流式 SSE 转换 (OpenAI → Anthropic)
+│   ├── streaming_test.py   # 流式转换测试 (16 用例)
+│   ├── mcp_bypass.py       # MCP web_search 短路 (mmx CLI)
+│   ├── mcp_bypass_test.py  # 短路模块测试 (14 用例)
+│   ├── error_handler.py    # 错误分类 + 指数退避 + 归档限速
+│   └── error_handler_test.py # 错误处理测试 (24 用例)
 ├── scripts/                # 启动/停止脚本
 │   ├── start_bg.bat        # Windows 托盘启动
 │   ├── stop.bat            # Windows 停止
@@ -75,7 +82,6 @@ cc2go/
 ├── data/                   # 运行时数据 (gitignored)
 ├── logs/                   # 日志 (gitignored)
 ├── error-archive/          # 错误归档 (gitignored)
-├── docs/                   # 文档草稿 (gitignored)
 ├── build_release.py        # PyInstaller 打包脚本
 ├── requirements.txt        # Python 依赖
 ├── .env.example            # 配置模板

@@ -10,21 +10,23 @@ English / [中文](#中文)
 
 A lightweight proxy that translates [Claude Code](https://claude.ai) (Anthropic Messages API) requests to OpenAI Chat Completions format, routing them to [OpenCode Go](https://opencode.ai) model endpoints. Includes a built-in Web UI for configuration.
 
-> **Core capabilities:** Protocol conversion (Anthropic ↔ OpenAI) — built-in Web UI + system tray for one-click model switching — auto-strip injected prompts and reasoning to save upstream tokens — broad model support (GLM, Kimi, Qwen, DeepSeek, MiMo, MiniMax, plus custom passthrough) — full tool call loop handling and image conversion. **Direct replacement for cc-switch.**
+> **Core capabilities:** Protocol conversion (Anthropic ↔ OpenAI) — built-in Web UI + system tray for one-click model switching — auto-strip injected prompts and reasoning to save upstream tokens — broad model support (GLM, Kimi, Qwen, DeepSeek, MiMo, MiniMax, plus custom passthrough) — full tool call loop and image conversion — streaming SSE conversion — MCP web_search bypass via mmx CLI — adaptive error retry with backoff — auto-sync to Claude Code config. **Direct replacement for cc-switch.**
 
 ### Features
 
-- 🔄 **Format conversion** — Anthropic ↔ OpenAI translation (tool_use, tool_result, reasoning_content, images)
+- 🔄 **Format conversion** — Anthropic ↔ OpenAI translation (tool_use, tool_result, reasoning_content, images, streaming SSE)
 - 🌐 **Web UI** — Built-in admin page at `http://localhost:4000`
 - 🎯 **Model switching** — Click to switch models, auto-syncs to Claude Code settings
-- ➕ **Custom models** — Add your own endpoints with independent API keys and URLs (passthrough, no format conversion)
+- ➕ **Custom models** — Add your own endpoints with independent API keys and URLs (passthrough for Anthropic-format, converted for OpenAI-format)
 - 🌓 **i18n** — Chinese and English UI
 - 🖼️ **Image support** — Converts Anthropic image blocks to OpenAI image_url format
-- 🔁 **Auto retry** — Failed requests retry up to 3 times with backoff
+- ⚡ **Streaming** — Real-time SSE streaming conversion (OpenAI → Anthropic format)
+- 🔍 **MCP web_search bypass** — Intercepts web_search tool_use, runs `mmx search` CLI directly, returns results without upstream call
+- 🔁 **Adaptive retry** — Error classification (rate_limit/auth/server/client) with exponential backoff, max 3 retries
 - 📋 **Log management** — Built-in log viewer with rotation (5MB per file, 3 backups)
-- 🖥️ **System tray** — Tray menu for one-click model switching; double-click to open admin
-- 💰 **Token saving** — Strips `<system-reminder>` and `[思考过程]` reasoning before forwarding upstream
-- 📦 **Error archive** — Auto-saves full request/response context on 400 errors (`error-archive/`)
+- 🖥️ **System tray** — Tray menu for one-click model switching; double-click to open admin; custom models show `display_name ★`
+- 💰 **Token saving** — Strips `<system-reminder>`, `[思考过程]` reasoning, and `thinking` blocks before forwarding upstream
+- 📦 **Error archive** — Auto-saves full request/response context on 400+ errors (`error-archive/`), rate-limited to 1 per 30s
 
 ### Quick Start
 
@@ -93,7 +95,7 @@ All configuration can be managed via the Web UI (`http://localhost:4000`):
 
 轻量级 AI 模型路由代理，将 Claude Code (Anthropic Messages API) 格式自动转为 OpenAI Chat Completions 格式，桥接到 [OpenCode Go](https://opencode.ai/zh/go) 的模型端点。内置 Web 管理页面，配置更方便。
 
-> **核心作用：** 协议转换（Anthropic ↔ OpenAI）→ Web 管理页 + 系统托盘一键切换模型 → 自动摘除注入提示词和推理文本省上游 Token → 支持 GLM / Kimi / Qwen / DeepSeek / MiMo / MiniMax 等主流模型及自定义透传 → 完整工具调用循环 + 图片转换。**可直接替代 cc-switch 等模型切换工具。**
+> **核心作用：** 协议转换（Anthropic ↔ OpenAI）→ Web 管理页 + 系统托盘一键切换模型 → 自动摘除注入提示词和推理文本省上游 Token → 支持 GLM / Kimi / Qwen / DeepSeek / MiMo / MiniMax 等主流模型及自定义透传 → 完整工具调用循环 + 图片转换 + 流式 SSE 转换 → MCP web_search 短路直搜 → 自适应错误重试 → 自动同步 Claude Code 配置。**可直接替代 cc-switch 等模型切换工具。**
 
 ### 特性
 
@@ -103,11 +105,13 @@ All configuration can be managed via the Web UI (`http://localhost:4000`):
 - ➕ **自定义模型** — 添加自己的 API 端点，独立配置 Key 和地址，请求完全透传
 - 🌓 **中英双语** — 界面支持中文和 English
 - 🖼️ **图片支持** — Anthropic 图片格式自动转换
-- 🔁 **自动重试** — 请求失败最多重试 3 次
+- 🔁 **自适应重试** — 错误分类（限流/鉴权/服务端/客户端），指数退避，最多 3 次
+- ⚡ **流式支持** — 实时 SSE 流式转换（OpenAI → Anthropic 格式）
+- 🔍 **MCP web_search 短路** — 拦截 web_search 工具调用，直接通过 `mmx search` CLI 搜索并返回，无需上游模型
 - 📋 **日志管理** — 内置日志查看器，自动轮转（每文件 5MB，保留 3 份）
-- 🖥️ **系统托盘** — 托盘菜单一键切换模型，双击打开管理页
-- 💰 **省 Token** — 转发前摘除 `<system-reminder>` 和 `[思考过程]` 推理文本
-- 📦 **错误归档** — 400 错误自动保存请求/响应完整上下文（`error-archive/`）
+- 🖥️ **系统托盘** — 托盘菜单一键切换模型，双击打开管理页；自定义模型显示 `display_name ★`
+- 💰 **省 Token** — 转发前摘除 `<system-reminder>`、`[思考过程]` 推理文本及 `thinking` 块
+- 📦 **错误归档** — 400+ 错误自动保存请求/响应完整上下文（`error-archive/`），限速 30 秒 1 次
 
 ### 快速开始
 
