@@ -9,7 +9,7 @@ import random
 import threading
 import time
 from enum import Enum
-from typing import Dict, List, Optional, Tuple
+from typing import Tuple, Optional
 
 logger = logging.getLogger("llm_router")
 
@@ -92,7 +92,7 @@ def classify_and_suggest_action(
         else:
             return (
                 RetryStrategy.SWITCH_MODEL,
-                f"[RateLimit] 多次 429，建议切换模型",
+                "[RateLimit] 多次 429，建议切换模型",
                 "try_next_available"
             )
     elif error_type == ErrorType.SERVER_ERROR:

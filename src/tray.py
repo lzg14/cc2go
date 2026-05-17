@@ -28,7 +28,7 @@ def get_static_dir():
             return meipass
     return os.path.join(get_base_dir(), "static")
 
-from router import app, config, logger, VERSION
+from router import app, config, logger, VERSION  # noqa: E402
 
 PID_FILE = os.path.join(get_base_dir(), "data", "cc2go.pid")
 

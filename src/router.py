@@ -13,7 +13,7 @@ import logging
 import asyncio
 import threading
 from datetime import datetime
-from typing import Optional, List, Dict, Any
+from typing import List, Dict
 
 import httpx
 import uvicorn

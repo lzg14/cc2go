@@ -6,7 +6,6 @@ import os
 sys.path.insert(0, os.path.dirname(__file__))
 
 import unittest
-from unittest.mock import AsyncMock, patch, MagicMock
 from error_handler import (
     ErrorType, RetryStrategy, get_backoff_delay,
     parse_upstream_error, classify_and_suggest_action,
@@ -143,10 +142,8 @@ class TestArchiveRateLimiter(unittest.TestCase):
 
 
 # ============ 集成测试：call_opencode 重试逻辑 ============
-import asyncio
-import json
-import threading
-import time as time_module
+import threading  # noqa: E402
+import time as time_module  # noqa: E402
 
 
 class TestCallOpencodeRetryLogic(unittest.TestCase):
@@ -157,7 +154,7 @@ class TestCallOpencodeRetryLogic(unittest.TestCase):
         场景：上游返回 429，重试后返回 200
         期望：RETRY_WITH_BACKOFF -> 退避 -> 重试 -> 成功
         """
-        from error_handler import get_backoff_delay, RetryStrategy, classify_and_suggest_action
+        from error_handler import RetryStrategy, classify_and_suggest_action
 
         # attempt 0: 429 -> RETRY_WITH_BACKOFF
         strategy0, _, _ = classify_and_suggest_action(429, {}, 0, 3)
@@ -326,7 +323,8 @@ class TestActualArchiveScenarios(unittest.TestCase):
         场景：Claude 发来的工具格式缺少 type 字段 (keys: name/description/input_schema)
         期望：convert_tools 正确添加 type: "function"
         """
-        import sys, os
+        import sys
+        import os
         sys.path.insert(0, os.path.dirname(__file__))
         from router import convert_tools
 
