@@ -1,0 +1,15 @@
+[Unit]
+Description=cc2go - Claude Code to OpenCode Go proxy
+After=network.target
+
+[Service]
+Type=simple
+User=cc2go
+WorkingDirectory=/opt/cc2go
+ExecStart=/opt/cc2go/scripts/start.sh
+Restart=on-failure
+RestartSec=5
+Environment=PORT=4000
+
+[Install]
+WantedBy=multi-user.target
