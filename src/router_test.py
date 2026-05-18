@@ -264,6 +264,26 @@ class TestConvertMessages(unittest.TestCase):
         result = convert_anthropic_messages_to_openai(messages)
         self.assertEqual(result[0]["reasoning_content"], "Let me read the file")
 
+    def test_text_and_tool_result_same_content_array(self):
+        """当 user 消息 content 数组同时包含 text 和 tool_result 时，text 应在该 tool_result 消息之前"""
+        messages = [{
+            "role": "user",
+            "content": [
+                {"type": "text", "text": "请执行命令"},
+                {
+                    "type": "tool_result",
+                    "tool_use_id": "call_001",
+                    "content": "命令输出"
+                }
+            ]
+        }]
+        result = convert_anthropic_messages_to_openai(messages)
+        self.assertEqual(len(result), 2)
+        self.assertEqual(result[0]["role"], "user")
+        self.assertEqual(result[0]["content"], "请执行命令")
+        self.assertEqual(result[1]["role"], "tool")
+        self.assertEqual(result[1]["tool_call_id"], "call_001")
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
