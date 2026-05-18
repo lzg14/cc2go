@@ -141,6 +141,8 @@ class Config:
             m.strip() for m in os.getenv("FALLBACK_MODELS", "").split(",")
             if m.strip()
         ]
+        self.anthropic_api_key = os.getenv("ANTHROPIC_API_KEY", "")
+        self.anthropic_base_url = os.getenv("ANTHROPIC_BASE_URL", "https://api.anthropic.com")
         self.models = merge_models(DEFAULT_MODELS, load_custom_models())
 
     def reload(self):
@@ -392,10 +394,7 @@ def convert_anthropic_messages_to_openai(messages: List[Dict]) -> List[Dict]:
                         "content": str(result_content) if result_content else ""
                     })
 
-            # 添加 tool 结果（必须在用户文本之前，满足 OpenAI tool 消息紧跟 tool_calls 的要求）
-            openai_messages.extend(tool_results)
-
-            # 合并 content_items 和 tool_calls 到一条消息
+# 先将 content_items 构建成消息并 append（仅当有内容时）
             if content_items or tool_calls_list or reasoning_content:
                 msg_dict = {"role": role}
                 if content_items:
@@ -413,9 +412,9 @@ def convert_anthropic_messages_to_openai(messages: List[Dict]) -> List[Dict]:
                 elif tool_calls_list and role == "assistant":
                     msg_dict["reasoning_content"] = ""
                 openai_messages.append(msg_dict)
-            elif isinstance(content, list) and not tool_results:
-                # content 数组处理后没有任何产出（如 user 消息仅含 thinking 块），且无 tool_result
-                openai_messages.append({"role": role, "content": ""})
+
+# 然后添加 tool_results（满足 OpenAI tool 消息紧跟 tool_calls 的要求）
+            openai_messages.extend(tool_results)
 
         elif content is not None:
             # content="" 不应被丢弃：assistant 空 content 消息在多轮 tool_use 对话中常见，
@@ -428,6 +427,22 @@ def convert_anthropic_messages_to_openai(messages: List[Dict]) -> List[Dict]:
             openai_messages.append({"role": role, "content": c})
 
     return openai_messages
+
+
+def sanitize_tool_name(name: str) -> str:
+    """清理工具名，移除 OpenAI API 不接受的特殊字符，防止 400 错误"""
+    if not name:
+        return "_unnamed_tool"
+    # 保留字母、数字、下划线，移除其他字符
+    cleaned = re.sub(r"[^a-zA-Z0-9_]", "_", name)
+    # 连续的 _ 合并为一个，避免 ___
+    cleaned = re.sub(r"_+", "_", cleaned)
+    # 去除首尾的 _
+    cleaned = cleaned.strip("_")
+    # 如果清理后为空或以数字开头，加上前缀
+    if not cleaned or cleaned[0].isdigit():
+        cleaned = "tool_" + cleaned
+    return cleaned or "_unnamed_tool"
 
 
 def convert_tools(tools: List[Dict]) -> List[Dict]:
@@ -446,19 +461,53 @@ def convert_tools(tools: List[Dict]) -> List[Dict]:
             logger.warning(f"[Tool] Skipping tool with empty name: {tool}")
             continue
 
+        # 清理工具名中的特殊字符（提案2）
+        safe_name = sanitize_tool_name(name)
+
         # 获取描述和参数
         description = func.get("description", "") or tool.get("description", "") or ""
         parameters = func.get("parameters", {}) or tool.get("input_schema", {}) or {"type": "object", "properties": {}}
 
+        # 清理 schema：移除 $schema、additionalProperties、format（提案3）
+        parameters = clean_schema(parameters)
+
         openai_tools.append({
             "type": "function",
             "function": {
-                "name": name,
+                "name": safe_name,
                 "description": str(description),
                 "parameters": parameters
             }
         })
     return openai_tools
+
+
+def clean_schema(schema: Dict) -> Dict:
+    """
+    递归清理 schema 中上游不支持的字段
+    移除：$schema、additionalProperties、format
+    递归处理：properties、items、allOf、anyOf、oneOf
+    （提案3）
+    """
+    if not isinstance(schema, dict):
+        return schema
+
+    result = {}
+    for key, value in schema.items():
+        # 跳过不支持的字段
+        if key in ("$schema", "additionalProperties", "format"):
+            continue
+        # 递归处理嵌套结构
+        if key in ("properties", "items") and isinstance(value, dict):
+            result[key] = clean_schema(value)
+        elif key in ("allOf", "anyOf", "oneOf") and isinstance(value, list):
+            result[key] = [clean_schema(v) if isinstance(v, dict) else v for v in value]
+        elif key == "definition" and isinstance(value, dict):
+            result[key] = clean_schema(value)
+        else:
+            result[key] = value
+
+    return result
 
 
 def convert_response_to_anthropic(result: Dict, model: str) -> Dict:
@@ -673,6 +722,17 @@ async def anthropic_messages(request: Request):
                     if cm.get("api_key"):
                         custom_key = cm["api_key"]
                 break
+
+        # Anthropic Fallback：模型未匹配且配置了 ANTHROPIC_API_KEY，转发到官方 API
+        if not model_config and not custom_base and config.anthropic_api_key:
+            logger.info(f"[Fallback] model={model_name} 未匹配，转发到 Anthropic API")
+            response = await call_opencode(
+                "/v1/messages",
+                body,
+                base_url=config.anthropic_base_url,
+                api_key=config.anthropic_api_key
+            )
+            return JSONResponse(content=json.loads(response.text))
 
         # 清除 output_config（某些 API 拒绝 empty tools + json_schema）
         if not tools and body.get("output_config", {}).get("format", {}).get("type") == "json_schema":
@@ -1211,6 +1271,15 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','SF Pro Display',sy
 <a href="https://opencode.ai/zh/go" target="_blank" style="font-size:11px;color:#0071e3;text-decoration:none;white-space:nowrap" data-i18n="getKey">获取 Key</a>
 </div>
 </div></div>
+<div style="margin:12px 0;border-top:1px solid #e8e8ed"></div>
+<div style="font-size:12px;color:#6e6e73;margin-bottom:10px" data-i18n="fallbackTitle">Anthropic Fallback（模型未匹配时转发到官方 API）</div>
+<div class="form-row"><div class="form-group"><label data-i18n="anthropicApiKey">Anthropic API Key</label>
+<input id="anthropicKey" type="password" placeholder="sk-ant-..." style="width:100%">
+</div></div>
+<div class="form-row"><div class="form-group"><label data-i18n="anthropicBaseUrl">Anthropic Base URL</label>
+<input id="anthropicBaseUrl" placeholder="https://api.anthropic.com" style="width:100%">
+<div style="font-size:11px;color:#86868b;margin-top:2px" data-i18n="fallbackUrlDesc">留空使用官方 API</div>
+</div></div>
 <div class="modal-actions"><button class="btn btn-secondary" style="flex:none;padding:8px 20px" onclick="closeModal('connModal')" data-i18n="cancel">取消</button><button class="btn btn-primary" style="flex:none;padding:8px 20px" onclick="saveConnModal()" data-i18n="save">保存</button></div>
 </div></div>
 <div class="modal-overlay" id="serviceModal">
@@ -1352,6 +1421,10 @@ const I18N = {
     modelUpstreamPlaceholder: "上游模型名（留空使用 ID）",
     modelKeyPlaceholder: "API Key（留空使用全局）",
     getKey: "获取 Key",
+    fallbackTitle: "Anthropic Fallback（模型未匹配时转发到官方 API）",
+    fallbackUrlDesc: "留空使用官方 API",
+    anthropicApiKey: "Anthropic API Key",
+    anthropicBaseUrl: "Anthropic Base URL",
   },
   en: {
     opencode: "Go Connection",
@@ -1418,6 +1491,10 @@ const I18N = {
     modelUpstreamPlaceholder: "Upstream model name (leave empty = use ID)",
     modelKeyPlaceholder: "API Key (leave empty = use global)",
     getKey: "Get Key",
+    fallbackTitle: "Anthropic Fallback (forward to official API when model not matched)",
+    fallbackUrlDesc: "Leave empty to use official API",
+    anthropicApiKey: "Anthropic API Key",
+    anthropicBaseUrl: "Anthropic Base URL",
   },
 };
 function t(key) { return (I18N[_lang]||I18N.zh)[key]||key; }
@@ -1548,6 +1625,8 @@ function syncToModals(cfg) {
   setChecked('detailedLoggingLogs', cfg.detailed_logging);
   setVal('archiveDir', cfg.error_archive_dir||'');
   setVal('archiveInterval', cfg.error_archive_interval||30);
+  setVal('anthropicKey', cfg.anthropic_api_key||'');
+  setVal('anthropicBaseUrl', cfg.anthropic_base_url||'');
 }
 function setVal(id, v) { const el = document.getElementById(id); if (el) el.value = v||''; }
 function setChecked(id, v) { const el = document.getElementById(id); if (el) el.checked = v!==false; }
@@ -1565,6 +1644,8 @@ async function save(keys) {
   if (!keys) {
     body.opencode_base_url = document.getElementById('baseUrl').value;
     body.opencode_api_key = document.getElementById('apiKey').value;
+    body.anthropic_api_key = getVal('anthropicKey');
+    body.anthropic_base_url = getVal('anthropicBaseUrl') || 'https://api.anthropic.com';
     body.router_host = getVal('host2');
     body.router_port = parseInt(getVal('port2'))||4000;
     body.master_key = getVal('masterKey2');
