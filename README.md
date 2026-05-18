@@ -77,6 +77,31 @@ scripts\stop.bat        # Stop background process
 
 ---
 
+## Docker
+
+```bash
+docker build -t cc2go .
+docker run -d -p 4000:4000 --env-file .env cc2go
+```
+
+Access at `http://localhost:4000`.
+
+## Linux Service (systemd)
+
+For permanent deployment on Linux:
+
+```bash
+# Copy service file
+sudo cp cc2go.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable cc2go
+sudo systemctl start cc2go
+```
+
+Requires a `cc2go` user and `/opt/cc2go` installation directory.
+
+---
+
 ## API Endpoints
 
 | Endpoint | Method | Description |

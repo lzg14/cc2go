@@ -77,6 +77,35 @@ scripts\stop.bat        # 停止后台进程
 
 ---
 
+## Docker
+
+```bash
+docker build -t cc2go .
+docker run -d -p 4000:4000 --env-file .env cc2go
+```
+
+访问 `http://localhost:4000` 管理页面。
+
+## Linux 服务 (systemd)
+
+适用于 Linux 长期运行：
+
+```bash
+# 安装服务
+sudo cp cc2go.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable cc2go
+sudo systemctl start cc2go
+```
+
+需要创建 `cc2go` 用户并把项目安装在 `/opt/cc2go` 目录。
+
+---
+
+关于 Gitee 同步：GitHub Release 不会自动同步到 Gitee，需要在 Gitee 手动创建发布或使用第三方同步工具。
+
+---
+
 ## API 端点
 
 | 端点 | 方法 | 说明 |
