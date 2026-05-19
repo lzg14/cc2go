@@ -152,6 +152,52 @@ class Config:
 config = Config()
 update_archive_limiter(config.error_archive_interval)
 
+# ============ 模型模糊匹配 ============
+# 当客户端请求的模型名在 config.models 中无精确匹配时，
+# 按 haiku/sonnet/opus 等关键词模糊匹配到可用模型
+DEFAULT_MODEL_HAIKU = os.getenv("MODEL_HAIKU", "deepseek-v4-flash")
+DEFAULT_MODEL_SONNET = os.getenv("MODEL_SONNET", "deepseek-v4-pro")
+DEFAULT_MODEL_OPUS = os.getenv("MODEL_OPUS", "glm-5.1")
+
+# 优先使用已配置模型中匹配层级的关键词，否则用环境变量指定的默认值
+_MODEL_TIER_KEYWORDS = {
+    "haiku": DEFAULT_MODEL_HAIKU,
+    "sonnet": DEFAULT_MODEL_SONNET,
+    "opus": DEFAULT_MODEL_OPUS,
+}
+
+
+def resolve_model_name(model_name: str, available_models: dict) -> str | None:
+    """
+    模型名解析：精确匹配 → 模糊匹配（按关键词）→ None
+    优先级：
+    1. 精确匹配 available_models 中的 key
+    2. 按 haiku/sonnet/opus 关键词从 available_models 中选取
+       （仅在 available_models 中有该模型时使用，否则退回到默认值）
+    3. 返回 None（由调用方决定 fallback 行为）
+    """
+    # 1. 精确匹配
+    if model_name in available_models:
+        return model_name
+
+    # 2. 关键词模糊匹配
+    lower_name = model_name.lower()
+
+    for keyword, default_model in _MODEL_TIER_KEYWORDS.items():
+        if keyword in lower_name:
+            # 优先用 available_models 中已有的同名模型
+            if default_model in available_models:
+                return default_model
+            # 否则在 available_models 中找一个最接近的（同一层级）
+            for avail in available_models:
+                if keyword in avail.lower():
+                    return avail
+            # 最后退回到默认值（即使不在 available_models 中也返回，
+            # 让调用方处理）
+            return default_model
+
+    return None
+
 
 def setup_logger():
     from logging.handlers import RotatingFileHandler
@@ -649,14 +695,21 @@ async def anthropic_messages(request: Request):
 
         logger.info(f"[Request] model={model_name}, messages={len(messages)}, tools={len(tools) if tools else 0}")
 
-        # 获取模型配置
+        # 获取模型配置（含模糊匹配：haiku/sonnet/opus → 最接近的可用模型）
         model_config = config.models.get(model_name)
         if model_config:
             model_id = model_config["id"]
             endpoint = model_config["endpoint"]
         else:
-            model_id = model_name
-            endpoint = "/v1/chat/completions"
+            resolved = resolve_model_name(model_name, config.models)
+            if resolved:
+                logger.info(f"[Model] 模糊匹配 {model_name} → {resolved}")
+                model_config = config.models[resolved]
+                model_id = model_config["id"]
+                endpoint = model_config["endpoint"]
+            else:
+                model_id = model_name
+                endpoint = "/v1/chat/completions"
 
         # 如果是自定义模型，使用其独立连接信息
         custom_base = None
