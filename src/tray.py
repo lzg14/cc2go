@@ -8,6 +8,7 @@ import time
 import atexit
 import threading
 import webbrowser
+import logging
 
 import uvicorn
 import pystray
@@ -88,8 +89,10 @@ def quit_app(icon, item):
 def run_server():
     host = config.router_host or "0.0.0.0"
     port = config.router_port or 4000
+    # 禁用 uvicorn 默认日志配置，避免与项目 logger 冲突
+    logging.disable(logging.CRITICAL)
     try:
-        uvicorn.run(app, host=host, port=port, log_level="info")
+        uvicorn.run(app, host=host, port=port, log_level="warning", log_config=None)
     except Exception as e:
         logger.error(f"Server error: {e}")
         sys.exit(1)
