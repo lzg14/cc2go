@@ -84,6 +84,9 @@ async def convert_openai_stream_to_anthropic(
     block_index = 0
     has_sent_message_start = False
     current_block_type = None
+    # 按 block_index 累积 tool_call arguments（OpenAI 流式每个 chunk 发增量片断，
+    # Anthropic input_json_delta 期望完整 partial_json）
+    _args_accumulator: Dict[int, str] = {}
 
     async for line in response.aiter_lines():
         line = line.strip()
@@ -142,14 +145,18 @@ async def convert_openai_stream_to_anthropic(
                     yield format_sse_event(build_content_block_stop(block_index), "content_block_stop")
                     block_index += 1
                 current_block_type = "tool_use"
+                # 新 block 重置累积器
+                _args_accumulator.pop(block_index, None)
                 yield format_sse_event(
                     build_content_block_start(block_index, "tool_use", id=tc_id, name=tc_name),
                     "content_block_start"
                 )
 
             if tc_input:
+                prev = _args_accumulator.get(block_index, "")
+                _args_accumulator[block_index] = prev + tc_input
                 yield format_sse_event(
-                    build_content_block_delta(block_index, "input_json_delta", tc_input),
+                    build_content_block_delta(block_index, "input_json_delta", _args_accumulator[block_index]),
                     "content_block_delta"
                 )
 
