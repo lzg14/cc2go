@@ -37,7 +37,7 @@ load_dotenv()
 def get_base_dir():
     """项目根目录，兼容 PyInstaller onefile 打包"""
     if getattr(sys, 'frozen', False):
-        return sys._MEIPASS
+        return os.path.dirname(sys.executable)
     return os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 
@@ -72,7 +72,7 @@ def update_archive_limiter(interval_seconds: int):
     error_archive_limiter.update(max(interval_seconds, 1))
 
 
-VERSION = "0.6.0"
+VERSION = "0.6.1"
 
 # ============ 配置 ============
 DEFAULT_MODELS = {
