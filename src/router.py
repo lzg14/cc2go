@@ -4,6 +4,7 @@ Claude Code (Anthropic) -> OpenAI 格式 -> OpenCode Go
 支持多轮对话中的工具调用循环
 """
 
+from __future__ import annotations
 import os
 import sys
 import re
