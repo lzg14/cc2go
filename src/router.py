@@ -185,13 +185,14 @@ def resolve_model_name(model_name: str, available_models: dict) -> str | None:
 
     for keyword, default_model in _MODEL_TIER_KEYWORDS.items():
         if keyword in lower_name:
-            # 优先用 available_models 中已有的同名模型
-            if default_model in available_models:
-                return default_model
-            # 否则在 available_models 中找一个最接近的（同一层级）
+            # 优先在 available_models 中找 keyword 匹配项（例如请求 "anything-haiku"
+            # 时有 "claude-haiku-3" 才真正匹配，而不是直接跳到默认值 deepseek-v4-flash）
             for avail in available_models:
                 if keyword in avail.lower():
                     return avail
+            # 如果 available_models 中没有 keyword 匹配的模型，再检查默认值
+            if default_model in available_models:
+                return default_model
             # 最后退回到默认值（即使不在 available_models 中也返回，
             # 让调用方处理）
             return default_model
