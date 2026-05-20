@@ -35,27 +35,45 @@ def should_bypass(body: Dict) -> Tuple[bool, Optional[str]]:
     """
     messages = body.get("messages", [])
     if not messages:
+        logger.debug("[Bypass] no messages, skip")
         return False, None
 
-    # 遍历消息，查找 assistant 消息中的 tool_use 块
-    for msg in reversed(messages):
+    # 详细调试日志：打印每条消息的结构
+    for i, msg in enumerate(messages):
+        role = msg.get("role", "?")
         content = msg.get("content", [])
+        content_types = []
+        if isinstance(content, list):
+            content_types = [b.get("type", "?") if isinstance(b, dict) else str(type(b)) for b in content]
+        elif isinstance(content, str):
+            content_types = ["str"]
+        logger.debug(f"[Bypass] msg[{i}] role={role}, content_types={content_types}")
+
         if not isinstance(content, list):
             continue
-        for block in content:
+        for j, block in enumerate(content):
             if not isinstance(block, dict):
                 continue
-            if block.get("type") in ("tool_use", "tool_use_block"):
-                name = block.get("name", "")
-                if not name:
+            block_type = block.get("type", "?")
+            block_name = block.get("name", "")
+            logger.debug(f"[Bypass]   msg[{i}] block[{j}] type={block_type}, name={repr(block_name)}")
+            if block_type in ("tool_use", "tool_use_block"):
+                if not block_name:
+                    logger.debug(f"[Bypass]   → tool_use block[{j}] has no name, skip")
                     continue
                 # MCP 格式: mcp__Provider__tool_name → 归一化到 base
-                if name.startswith("mcp__"):
-                    base = name.split("__", 2)[-1]
+                if block_name.startswith("mcp__"):
+                    base = block_name.split("__", 2)[-1]
+                    logger.debug(f"[Bypass]   → MCP format, base={base}, BYPASS_TOOLS={list(BYPASS_TOOLS.keys())}")
                     if base in BYPASS_TOOLS:
+                        logger.info(f"[Bypass] HIT! name={block_name} → base={base}")
                         return True, base
-                if name in BYPASS_TOOLS:
-                    return True, name
+                if block_name in BYPASS_TOOLS:
+                    logger.info(f"[Bypass] HIT! name={block_name}")
+                    return True, block_name
+                else:
+                    logger.debug(f"[Bypass]   → tool_use[{j}] name={block_name!r} NOT in BYPASS_TOOLS")
+    logger.debug(f"[Bypass] no tool_use found, BYPASS_TOOLS={list(BYPASS_TOOLS.keys())}")
     return False, None
 
 
@@ -84,18 +102,22 @@ async def handle_bypass(tool_name: str, query: str) -> Dict:
     """
     执行短路处理，返回 Anthropic 格式的响应
     """
+    logger.info(f"[Bypass] handle_bypass called: tool={tool_name}, query={query!r}")
     handler = BYPASS_TOOLS.get(tool_name)
     if not handler:
         raise ValueError(f"Unknown bypass tool: {tool_name}")
 
     if handler["type"] == "mmx":
-        return await handle_mmx_search(tool_name, query)
+        result = await handle_mmx_search(tool_name, query)
+        logger.debug(f"[Bypass] mmx result: type={result['type']}, content_len={len(result.get('content',[]))}")
+        return result
 
     raise ValueError(f"Unknown handler type: {handler['type']}")
 
 
 async def handle_mmx_search(tool_name: str, query: str) -> Dict:
     """通过 mmx CLI 执行搜索并返回 Anthropic 格式"""
+    logger.info(f"[Bypass/mmx] starting search: query={query!r}, mmx_path={MMX_PATH}")
     result = {
         "type": "message",
         "id": f"bypass-{int(time.time() * 1000)}",
