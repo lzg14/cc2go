@@ -5,6 +5,7 @@ cc2go 系统托盘 - 后台静默运行，托盘图标管理
 import os
 import sys
 import time
+import signal
 import atexit
 import threading
 import webbrowser
@@ -45,6 +46,84 @@ def remove_pid():
             os.remove(PID_FILE)
     except Exception:
         pass
+
+
+def kill_old_process():
+    """检查端口是否被占用，杀掉旧进程"""
+    import socket
+    port = config.router_port or 4000
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    try:
+        sock.bind(("127.0.0.1", port))
+        sock.close()
+        return
+    except OSError:
+        sock.close()
+
+    # 端口被占用，尝试杀旧进程
+    print(f"[cc2go] 端口 {port} 被占用，尝试停止旧进程...")
+    logger.info(f"端口 {port} 被占用，尝试停止旧进程")
+
+    # 1. 先尝试 PID 文件里的进程
+    old_pid = None
+    try:
+        if os.path.exists(PID_FILE):
+            with open(PID_FILE, "r") as f:
+                old_pid = int(f.read().strip())
+    except Exception:
+        pass
+
+    if old_pid:
+        _try_kill_pid(old_pid)
+
+    # 2. 通过 netstat 找到占用端口的进程
+    import subprocess
+    try:
+        result = subprocess.run(
+            ["netstat", "-ano"],
+            capture_output=True, text=True, timeout=5
+        )
+        for line in result.stdout.splitlines():
+            if f":{port}" in line and "LISTENING" in line:
+                parts = line.split()
+                pid = int(parts[-1])
+                if pid != os.getpid():
+                    _try_kill_pid(pid)
+    except Exception:
+        pass
+
+    # 等待端口释放
+    for _ in range(10):
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        try:
+            sock.bind(("127.0.0.1", port))
+            sock.close()
+            print(f"[cc2go] 端口 {port} 已释放")
+            logger.info(f"端口 {port} 已释放")
+            return
+        except OSError:
+            sock.close()
+        time.sleep(0.5)
+
+    print(f"[cc2go] 警告: 端口 {port} 仍被占用，启动可能失败")
+    logger.warning(f"端口 {port} 仍被占用，启动可能失败")
+
+
+def _try_kill_pid(pid):
+    """尝试杀掉指定 PID 的进程"""
+    if pid == os.getpid():
+        return
+    print(f"[cc2go] 停止旧进程 PID={pid}")
+    logger.info(f"停止旧进程 PID={pid}")
+    try:
+        os.kill(pid, signal.SIGTERM)
+    except OSError:
+        try:
+            import subprocess
+            subprocess.run(["taskkill", "/f", "/pid", str(pid)],
+                          capture_output=True, timeout=5)
+        except Exception:
+            pass
 
 
 def load_icon():
@@ -89,7 +168,6 @@ def quit_app(icon, item):
 def run_server():
     host = config.router_host or "0.0.0.0"
     port = config.router_port or 4000
-    # 禁用 uvicorn 默认日志配置，避免与项目 logger 冲突
     logging.disable(logging.CRITICAL)
     try:
         uvicorn.run(app, host=host, port=port, log_level="warning", log_config=None)
@@ -110,6 +188,7 @@ def _auto_open_admin():
 
 def main():
     os.chdir(get_base_dir())
+    kill_old_process()
     save_pid()
     atexit.register(remove_pid)
 

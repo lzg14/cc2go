@@ -73,7 +73,7 @@ def update_archive_limiter(interval_seconds: int):
     error_archive_limiter.update(max(interval_seconds, 1))
 
 
-VERSION = "0.6.3"
+VERSION = "0.7.0"
 
 # ============ 配置 ============
 DEFAULT_MODELS = {
@@ -681,6 +681,7 @@ async def anthropic_messages(request: Request):
 
     try:
         body = await request.json()
+        logger.debug(f"[ENTER] raw_body_model={body.get('model')}, stream={body.get('stream')}, msgs={len(body.get('messages',[]))}")
 
         # MCP 工具短路检测
         bypass, tool_name = should_bypass(body)
@@ -697,7 +698,9 @@ async def anthropic_messages(request: Request):
         messages = body.get("messages", [])
         tools = body.get("tools", [])
 
-        logger.info(f"[Request] model={model_name}, messages={len(messages)}, tools={len(tools) if tools else 0}")
+        logger.info(f"[Request] model={model_name}, messages={len(messages)}, tools={len(tools) if tools else 0}, stream={body.get('stream')}")
+
+        request_body_stream = body.get("stream")
 
         # 获取模型配置（含模糊匹配：haiku/sonnet/opus → 最接近的可用模型）
         model_config = config.models.get(model_name)
@@ -731,6 +734,8 @@ async def anthropic_messages(request: Request):
                         custom_key = cm["api_key"]
                 break
 
+        logger.debug(f"[Route] model={model_name}, endpoint={endpoint}, custom_base={custom_base}, custom_ep={custom_ep}, custom_upstream={custom_upstream_model}, model_id={model_id}")
+
         # 清除 output_config（某些 API 拒绝 empty tools + json_schema）
         if not tools and body.get("output_config", {}).get("format", {}).get("type") == "json_schema":
             body.pop("output_config", None)
@@ -740,9 +745,11 @@ async def anthropic_messages(request: Request):
             body["model"] = custom_upstream_model
             body["stream"] = False
             full_url = custom_base + custom_ep
-            logger.info(f"[Passthrough] model={custom_upstream_model}, url={full_url}")
+            logger.debug(f"[Passthrough] model={custom_upstream_model}, url={full_url}, stream={body.get('stream')}, body_stream_orig={request_body_stream}")
             response = await call_opencode("", body, api_key=custom_key, full_url=full_url)
             raw_text = response.text
+            is_sse = raw_text.strip().startswith("event:") if raw_text else False
+            logger.debug(f"[Passthrough Response] model={model_name}, status={response.status_code}, is_sse={is_sse}, content_type={response.headers.get('content-type','?')}, len={len(raw_text)}")
             if response.status_code != 200:
                 logger.error(f"[Passthrough] {model_name} status={response.status_code}: {raw_text[:500]}")
                 if response.status_code >= 400 and error_archive_limiter.archive():
@@ -761,10 +768,12 @@ async def anthropic_messages(request: Request):
         # MiniMax 用 /v1/messages 端点
         if endpoint == "/v1/messages":
             body["thinking"] = {"type": "disabled"}
+            body["stream"] = False
             body["messages"] = strip_thinking_from_messages(body.get("messages", []))
+            logger.debug(f"[MiniMax] model={model_name}, endpoint={endpoint}, stream={body.get('stream')}, custom_base={custom_base}, custom_key={'***' if custom_key else 'None'}")
             if config.detailed_logging:
                 logger.debug(f"[MiniMax Payload] {json.dumps(body, ensure_ascii=False)[:1000]}")
-            logger.debug(f"[Payload] Direct forward to {endpoint} with thinking disabled")
+            logger.debug(f"[Payload] Direct forward to {endpoint} with thinking disabled, stream={body.get('stream')}")
             response = await call_opencode(endpoint, body, api_key=custom_key, base_url=custom_base)
 
             if response.status_code != 200:
@@ -777,6 +786,8 @@ async def anthropic_messages(request: Request):
                 raise HTTPException(status_code=response.status_code, detail=error_detail)
 
             raw_text = response.text
+            is_sse = raw_text.strip().startswith("event:") if raw_text else False
+            logger.debug(f"[MiniMax Response] model={model_name}, status={response.status_code}, is_sse={is_sse}, content_type={response.headers.get('content-type','?')}, len={len(raw_text)}")
             if config.detailed_logging:
                 logger.info(f"[Raw Response] model={model_name}, body={raw_text[:2000]}")
             try:
@@ -791,6 +802,7 @@ async def anthropic_messages(request: Request):
             return JSONResponse(content=result)
 
         # 其他端点需要转换格式
+        logger.debug(f"[ConvertOpenAI] model={model_name}, endpoint={endpoint}, is_stream={body.get('stream', False)}, custom_base={custom_base}")
         openai_messages = convert_anthropic_messages_to_openai(messages)
         openai_tools = convert_tools(tools) if tools else None
 

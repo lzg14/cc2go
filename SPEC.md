@@ -1,6 +1,6 @@
 # cc2go 版本管理规范 (SPEC)
 
-> 当前版本：0.6.0 | 更新：2026-05-17
+> 当前版本：0.7.0 | 更新：2026-05-21
 
 ---
 
@@ -58,7 +58,7 @@ git push && git push --tags
 |------|------|---------|
 | 0.5.0 | 2026-05-17 | 初始开发：格式转换、系统托盘、打包脚本、工具调用循环 |
 | 0.5.0+ | 2026-05-17 | 新增：流式 SSE 转换（streaming.py）、MCP web_search 短路（mcp_bypass.py）、错误分类与自适应重试（error_handler.py）、自定义模型 display_name 支持、auto-ID 生成、output_config 修复、Cache-Control 缓存防过期、mmx Windows 路径修复、54 个单元测试 |
-| 0.6.0 | 2026-05-17 | 模型 UI 重构（预置/自定义分区、编辑按钮）、托盘简化（仅管理页+退出）、thinking 块三路处理（透传/摘除/转换）、DeepSeek reasoning_content 修复（tool_calls 消息自动补空）、自定义模型按 id 路由匹配（避免预置模型名冲突）、错误归档增强、19 个格式转换单元测试 |
+| 0.7.0 | 2026-05-21 | 修复 DeepSeek 400 错误（reasoning_content 缺失）、MiniMax SSE 流式响应问题（透传路径强制 stream=false）、启动时自动杀旧进程防端口冲突、诊断日志（DEBUG 级别）、stop/start 脚本改进 |
 
 
 ## 项目目录结构
