@@ -191,12 +191,11 @@ def resolve_model_name(model_name: str, available_models: dict) -> str | None:
             for avail in available_models:
                 if keyword in avail.lower():
                     return avail
-            # 如果 available_models 中没有 keyword 匹配的模型，再检查默认值
+            # available_models 中没有 keyword 匹配的模型，再检查默认值是否在其中
             if default_model in available_models:
                 return default_model
-            # 最后退回到默认值（即使不在 available_models 中也返回，
-            # 让调用方处理）
-            return default_model
+            # 默认值也不在 available_models 中，返回 None 让调用方走通用 fallback
+            return None
 
     return None
 
@@ -461,8 +460,11 @@ def convert_anthropic_messages_to_openai(messages: List[Dict]) -> List[Dict]:
             elif isinstance(content, list) and not tool_results:
                 # content 数组处理后没有任何产出（如 user 消息仅含 thinking 块），且无 tool_result
                 openai_messages.append({"role": role, "content": ""})
+            # else: content_items 等都为空但有 tool_results 时，
+            # 不单独发 user 消息，直接 extend tool_results
+            #（避免产生 content=None 的空 user 消息）
 
-            # 添加 tool 结果（跟在用户文本之后）
+            # 添加 tool 结果（跟在用户消息之后）
             openai_messages.extend(tool_results)
 
         elif content is not None:
