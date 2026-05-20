@@ -736,6 +736,7 @@ async def anthropic_messages(request: Request):
         # 自定义模型透传：仅对 Anthropic 格式端点保留直传，OpenAI 格式走正常转换路径
         if custom_base and custom_ep == "/v1/messages":
             body["model"] = custom_upstream_model
+            body["stream"] = False
             full_url = custom_base + custom_ep
             logger.info(f"[Passthrough] model={custom_upstream_model}, url={full_url}")
             response = await call_opencode("", body, api_key=custom_key, full_url=full_url)
