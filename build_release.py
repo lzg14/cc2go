@@ -118,7 +118,7 @@ Claude Code → OpenCode Go 适配器
 | 配置项 | 值 |
 |--------|-----|
 | Base URL | `http://localhost:4000` |
-| API Key | `sk-litellm-local` |
+| API Key | `sk-cc2go-local` |
 
 ## 文件说明
 

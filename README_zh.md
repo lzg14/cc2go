@@ -1,15 +1,22 @@
 # cc2go
 
-**Claude Code → OpenCode Go 适配器**
+<p align="center">
+  <b>Claude Code → OpenCode Go 适配器</b>
+  <br>
+  轻量级 AI 模型路由代理，让 Claude Code 使用国产模型
+</p>
 
-轻量级 AI 模型路由代理，将 Claude Code (Anthropic Messages API) 格式自动转为 OpenAI Chat Completions 格式，桥接到 [OpenCode Go](https://opencode.ai/zh/go) 的模型端点。内置 Web 管理页面，配置更方便。
-
-> **核心作用：** 协议转换（Anthropic ↔ OpenAI）→ Web 管理页 + 系统托盘切换模型 → 自动摘除注入提示词和推理文本省上游 Token → 支持 GLM / Kimi / Qwen / DeepSeek / MiMo / MiniMax 等主流模型及自定义端点 → 完整工具调用循环 + 图片转换 + 流式 SSE 转换 → MCP web_search 短路直搜 → 自适应错误重试 → 自动同步 Claude Code 配置 → DeepSeek thinking 模式修复（reasoning_content 透传）。**可直接替代 cc-switch 等模型切换工具。**
+<p align="center">
+  <img src="https://img.shields.io/badge/python-3.9%2B-blue" alt="Python">
+  <img src="https://img.shields.io/github/license/lzg14/cc2go" alt="License">
+  <img src="https://img.shields.io/github/v/release/lzg14/cc2go" alt="Release">
+  <img src="https://img.shields.io/github/stars/lzg14/cc2go" alt="Stars">
+</p>
 
 ## 特性
 
-- 🔄 **格式转换** — 自动处理 tool_use、tool_result、reasoning_content、图片等格式转换
-- 🌐 **Web 管理页面** — 浏览器打开 `http://localhost:4000` 即可管理
+- 🔄 **协议转换** — 自动将 Anthropic Messages API 转为 OpenAI Chat Completions 格式
+- 🌐 **Web 管理页** — 浏览器打开 `http://localhost:4000`，点击切换模型
 - 🎯 **模型切换** — 一键切换，自动同步到 Claude Code 配置
 - ➕ **自定义模型** — 添加自己的 API 端点，独立配置 Key 和地址
 - 🖼️ **图片支持** — Anthropic 图片格式自动转换
@@ -52,7 +59,7 @@
 | 配置项 | 值 |
 |--------|-------|
 | Base URL | `http://localhost:4000` |
-| API Key | `sk-litellm-local` |
+| API Key | `sk-cc2go-local` |
 
 完成！正常使用 Claude Code，切换模型在管理页面 `http://localhost:4000` 操作即可。
 

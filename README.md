@@ -1,15 +1,22 @@
 # cc2go
 
-**Claude Code → OpenCode Go adapter**
+<p align="center">
+  <b>Claude Code → OpenCode Go Adapter</b>
+  <br>
+  A lightweight proxy that lets Claude Code use any OpenAI-compatible model
+</p>
 
-A lightweight proxy that translates [Claude Code](https://claude.ai) (Anthropic Messages API) requests to OpenAI Chat Completions format, routing them to [OpenCode Go](https://opencode.ai) model endpoints. Includes a built-in Web UI for configuration.
-
-> **Core capabilities:** Protocol conversion (Anthropic ↔ OpenAI) — built-in Web UI + system tray — auto-strip injected prompts and reasoning to save upstream tokens — broad model support (GLM, Kimi, Qwen, DeepSeek, MiMo, MiniMax, plus custom endpoints) — full tool call loop and image conversion — streaming SSE conversion — MCP web_search bypass via mmx CLI — adaptive error retry with backoff — auto-sync to Claude Code config — DeepSeek thinking mode fix (reasoning_content passthrough). **Direct replacement for cc-switch.**
+<p align="center">
+  <img src="https://img.shields.io/badge/python-3.9%2B-blue" alt="Python">
+  <img src="https://img.shields.io/github/license/lzg14/cc2go" alt="License">
+  <img src="https://img.shields.io/github/v/release/lzg14/cc2go" alt="Release">
+  <img src="https://img.shields.io/github/stars/lzg14/cc2go" alt="Stars">
+</p>
 
 ## Features
 
-- 🔄 **Format conversion** — Anthropic ↔ OpenAI translation (tool_use, tool_result, reasoning_content, images, streaming SSE)
-- 🌐 **Web UI** — Built-in admin page at `http://localhost:4000`
+- 🔄 **Protocol translation** — Converts Anthropic Messages API ↔ OpenAI Chat Completions
+- 🌐 **Web UI** — Built-in admin page at `http://localhost:4000`, click to switch models
 - 🎯 **Model switching** — Click to switch models, auto-syncs to Claude Code settings
 - ➕ **Custom models** — Add your own endpoints with independent API keys and URLs
 - 🖼️ **Image support** — Converts Anthropic image blocks to OpenAI image_url format
@@ -52,7 +59,7 @@ In Claude Code's settings, configure:
 | Setting | Value |
 |---------|-------|
 | Base URL | `http://localhost:4000` |
-| API Key | `sk-litellm-local` |
+| API Key | `sk-cc2go-local` |
 
 That's it! Use Claude Code as normal — select models from the web admin page at `http://localhost:4000`.
 
