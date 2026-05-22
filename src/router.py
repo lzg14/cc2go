@@ -147,7 +147,7 @@ class Config:
     def __init__(self):
         self.opencode_base_url = os.getenv("OPENCODE_BASE_URL", "https://opencode.ai/zen/go")
         self.opencode_api_key = os.getenv("OPENCODE_API_KEY", "")
-        self.router_port = int(os.getenv("ROUTER_PORT", "4000"))
+        self.router_port = int(os.getenv("ROUTER_PORT", "4001"))
         self.router_host = os.getenv("ROUTER_HOST", "127.0.0.1")
         self.master_key = os.getenv("ROUTER_MASTER_KEY", "sk-cc2go-local")
         self.max_retry = int(os.getenv("MAX_RETRY", "3"))
@@ -1488,7 +1488,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','SF Pro Display',sy
 <div class="modal"><h2 data-i18n="service">服务配置</h2>
 <div style="font-size:13px;color:#86868b;margin-bottom:12px" data-i18n="serviceDesc">修改后自动同步到 Claude Code 的连接配置</div>
 <div class="form-row"><div class="form-group" data-i18n-label="host"><label>监听主机</label><input id="host2" placeholder="0.0.0.0"></div></div>
-<div class="form-row"><div class="form-group" data-i18n-label="port"><label>端口</label><input id="port2" type="number" placeholder="4000"></div></div>
+<div class="form-row"><div class="form-group" data-i18n-label="port"><label>端口</label><input id="port2" type="number" placeholder="4001"></div></div>
 <div class="form-row"><div class="form-group" data-i18n-label="masterKey"><label>Master Key</label><input id="masterKey2" type="password" placeholder="sk-..."></div></div>
 <div class="modal-actions"><button class="btn btn-secondary" style="flex:none;padding:6px 16px" onclick="closeModal('serviceModal')" data-i18n="cancel">取消</button><button class="btn btn-primary" style="flex:none;padding:6px 16px" onclick="saveServiceModal()" data-i18n="save">保存</button></div>
 </div></div>
@@ -1869,7 +1869,7 @@ async function save(keys) {
     body.opencode_base_url = document.getElementById('baseUrl').value;
     body.opencode_api_key = document.getElementById('apiKey').value;
     body.router_host = getVal('host2');
-    body.router_port = parseInt(getVal('port2'))||4000;
+    body.router_port = parseInt(getVal('port2'))||4001;
     body.master_key = getVal('masterKey2');
     body.max_retry = parseInt(getVal('maxRetry2'))||3;
     body.retry_delay = parseFloat(getVal('retryDelay2'))||1;

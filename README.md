@@ -1,4 +1,4 @@
-# cc2go
+# cc2go <small>v0.7.3</small>
 
 <p align="center">
   <b>Claude Code → OpenCode Go Adapter</b>
@@ -27,7 +27,7 @@
 ## Features
 
 - 🔄 **Protocol translation** — Converts Anthropic Messages API ↔ OpenAI Chat Completions
-- 🌐 **Web UI** — Built-in admin page at `http://localhost:4000`, click to switch models
+- 🌐 **Web UI** — Built-in admin page at `http://localhost:4001`, click to switch models
 - 🎯 **Model switching** — Click to switch models, auto-syncs to Claude Code settings
 - ➕ **Custom models** — Add your own endpoints with independent API keys and URLs
 - 🖼️ **Image support** — Converts Anthropic image blocks to OpenAI image_url format
@@ -71,10 +71,10 @@ In Claude Code's settings, configure:
 
 | Setting | Value |
 |---------|-------|
-| Base URL | `http://localhost:4000` |
+| Base URL | `http://localhost:4001` |
 | API Key | `sk-cc2go-local` |
 
-That's it! Use Claude Code as normal — select models from the web admin page at `http://localhost:4000`.
+That's it! Use Claude Code as normal — select models from the web admin page at `http://localhost:4001`.
 
 ### How to Quit
 
@@ -103,10 +103,10 @@ scripts\stop.bat        # Stop background process
 
 ```bash
 docker build -t cc2go .
-docker run -d -p 4000:4000 --env-file .env cc2go
+docker run -d -p 4001:4001 --env-file .env cc2go
 ```
 
-Access at `http://localhost:4000`.
+Access at `http://localhost:4001`.
 
 ## Linux Service (systemd)
 
@@ -150,7 +150,7 @@ Requires a `cc2go` user and `/opt/cc2go` installation directory.
 
 ## Configuration
 
-All configuration via Web UI (`http://localhost:4000`):
+All configuration via Web UI (`http://localhost:4001`):
 - **Connection** — OpenCode Go base URL and API key
 - **Service** — Host, port, master key (auto-syncs to Claude Code)
 - **Custom Models** — Add/edit/remove custom model endpoints

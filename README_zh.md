@@ -16,7 +16,7 @@
 ## 特性
 
 - 🔄 **协议转换** — 自动将 Anthropic Messages API 转为 OpenAI Chat Completions 格式
-- 🌐 **Web 管理页** — 浏览器打开 `http://localhost:4000`，点击切换模型
+- 🌐 **Web 管理页** — 浏览器打开 `http://localhost:4001`，点击切换模型
 - 🎯 **模型切换** — 一键切换，自动同步到 Claude Code 配置
 - ➕ **自定义模型** — 添加自己的 API 端点，独立配置 Key 和地址
 - 🖼️ **图片支持** — Anthropic 图片格式自动转换
@@ -60,10 +60,10 @@
 
 | 配置项 | 值 |
 |--------|-------|
-| Base URL | `http://localhost:4000` |
+| Base URL | `http://localhost:4001` |
 | API Key | `sk-cc2go-local` |
 
-完成！正常使用 Claude Code，切换模型在管理页面 `http://localhost:4000` 操作即可。
+完成！正常使用 Claude Code，切换模型在管理页面 `http://localhost:4001` 操作即可。
 
 ### 如何退出
 
@@ -92,10 +92,10 @@ scripts\stop.bat        # 停止后台进程
 
 ```bash
 docker build -t cc2go .
-docker run -d -p 4000:4000 --env-file .env cc2go
+docker run -d -p 4001:4001 --env-file .env cc2go
 ```
 
-访问 `http://localhost:4000` 管理页面。
+访问 `http://localhost:4001` 管理页面。
 
 ## Linux 服务 (systemd)
 
@@ -143,7 +143,7 @@ sudo systemctl start cc2go
 
 ## 配置说明
 
-通过 Web UI（`http://localhost:4000`）完成所有配置：
+通过 Web UI（`http://localhost:4001`）完成所有配置：
 - **连接** — OpenCode Go 地址和 API Key
 - **服务** — 监听主机、端口、Master Key（自动同步到 Claude Code）
 - **自定义模型** — 增删改自定义 API 端点

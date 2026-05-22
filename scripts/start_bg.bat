@@ -7,7 +7,7 @@ if not exist .env (
     copy .env.example .env 2>nul
 )
 
-set "ROUTER_PORT=4000"
+set "ROUTER_PORT=4001"
 for /f "tokens=1,* delims==" %%a in ('findstr /b "ROUTER_PORT" .env 2^>nul') do (
     for /f "tokens=*" %%c in ("%%b") do set "ROUTER_PORT=%%c"
 )

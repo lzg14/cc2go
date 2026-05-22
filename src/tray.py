@@ -51,7 +51,7 @@ def remove_pid():
 def kill_old_process():
     """检查端口是否被占用，杀掉旧进程"""
     import socket
-    port = config.router_port or 4000
+    port = config.router_port or 4001
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     try:
         sock.bind(("127.0.0.1", port))
@@ -167,7 +167,7 @@ def quit_app(icon, item):
 
 def run_server():
     host = config.router_host or "0.0.0.0"
-    port = config.router_port or 4000
+    port = config.router_port or 4001
     logging.disable(logging.CRITICAL)
     try:
         uvicorn.run(app, host=host, port=port, log_level="warning", log_config=None)

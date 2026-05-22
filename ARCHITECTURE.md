@@ -120,7 +120,7 @@ Claude Code          cc2go                 OpenCode Go         上游模型
 
 ### router.py — 主路由 + 格式转换 + Web UI
 
-- FastAPI 应用，监听 `host:port`（默认 `0.0.0.0:4000`）
+- FastAPI 应用，监听 `host:port`（默认 `0.0.0.0:4001`）
 - `POST /v1/messages`：核心入口，实现上述决策树
 - `convert_anthropic_messages_to_openai()`：Anthropic → OpenAI 格式转换
   - `thinking` 块 → `reasoning_content`
