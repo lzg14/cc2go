@@ -1702,6 +1702,9 @@ const I18N = {
     restoreOk: "Original config restored",
     restoreNoBackup: "No backup file found",
     restoreSame: "Current config is already the same as backup",
+    setupDesc: "⚠️ Configure Base URL and API Key in the Connection settings first",
+    updateTitle: "📦 New version",
+    updateDesc: "Download on GitHub",
   },
 };
 function t(key) { return (I18N[_lang]||I18N.zh)[key]||key; }
@@ -1764,6 +1767,13 @@ async function load() {
         }).join('');
       }
     }
+    const setupBanner = document.getElementById('setupBanner');
+    if (cfg.setup_complete === false) {
+      setupBanner.style.display = 'flex';
+      document.getElementById('setupBannerText').textContent = t('setupDesc');
+    } else {
+      setupBanner.style.display = 'none';
+    }
     const vEl = document.getElementById('versionDisplay');
     if (vEl && cfg.version) vEl.textContent = 'v' + cfg.version + ' · ';
     if (cfg.stats) {
@@ -1774,6 +1784,15 @@ async function load() {
     const dot = document.getElementById('statusDot');
     dot.className = 'status-dot ok';
     document.getElementById('statusText').textContent = t('running');
+    // 异步检查版本更新
+    fetch('/api/check-update').then(r=>r.json()).then(d=>{
+      if (d.update_available) {
+        const el = document.getElementById('updateBanner');
+        el.style.display = 'flex';
+        document.getElementById('updateBannerText').innerHTML =
+          t('updateTitle')+' <a href="https://github.com/lzg14/cc2go/releases" target="_blank" style="color:inherit;font-weight:600">v'+d.latest_version+'</a> · '+t('updateDesc');
+      }
+    }).catch(()=>{});
     toast(t('loaded'));
   } catch(e) {
     const dot = document.getElementById('statusDot');

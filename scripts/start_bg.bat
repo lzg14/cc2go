@@ -7,13 +7,11 @@ if not exist .env (
     copy .env.example .env 2>nul
 )
 
-REM 从 .env 读取端口，默认 4000
 set "ROUTER_PORT=4000"
 for /f "tokens=1,* delims==" %%a in ('findstr /b "ROUTER_PORT" .env 2^>nul') do (
     for /f "tokens=*" %%c in ("%%b") do set "ROUTER_PORT=%%c"
 )
 
-REM 杀残留的 cc2go 进程（按命令行匹配，不依赖端口）
 wmic process where "commandline like '%%cc2go%%router.py%%'" delete 2>nul >nul
 wmic process where "commandline like '%%cc2go%%tray.py%%'" delete 2>nul >nul
 timeout /t 2 /nobreak >nul
@@ -21,7 +19,6 @@ timeout /t 2 /nobreak >nul
 echo Starting cc2go in system tray (port %ROUTER_PORT%)...
 powershell -Command "Start-Process -WindowStyle Hidden -FilePath 'python' -ArgumentList 'src\tray.py' -WorkingDirectory '%cd%'"
 
-REM 等待启动并验证
 timeout /t 3 /nobreak >nul
 netstat -ano | findstr ":%ROUTER_PORT%.*LISTENING" >nul 2>&1
 if %errorlevel%==0 (
