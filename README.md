@@ -27,6 +27,8 @@
 - 💰 **Token saving** — Strips `<system-reminder>`, `[思考过程]` reasoning, and `thinking` blocks before forwarding upstream
 - 💾 **Config backup** — Auto-backup original Claude Code config on first model switch; one-click restore from admin UI
 - 🔑 **Security** — Defaults to 127.0.0.1 (local-only), Bearer Token authentication on proxy endpoints
+- 🔧 **Tool name sanitization** — Replaces special characters in tool names to prevent 400 errors
+- 🧹 **Schema cleaning** — Recursively removes incompatible JSON Schema fields for broader model compatibility
 
 ---
 

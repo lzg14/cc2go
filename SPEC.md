@@ -1,6 +1,6 @@
 # cc2go 版本管理规范 (SPEC)
 
-> 当前版本：0.7.0 | 更新：2026-05-21
+> 当前版本：0.7.2 | 更新：2026-05-22
 
 ---
 
@@ -61,6 +61,7 @@ git push && git push --tags
 | 0.6.0 | 2026-05-17 | 模型 UI 重构（预置/自定义分区、编辑按钮）、托盘简化（仅管理页+退出）、thinking 块三路处理（透传/摘除/转换）、DeepSeek reasoning_content 修复（tool_calls 消息自动补空）、自定义模型按 id 路由匹配（避免预置模型名冲突）、错误归档增强、19 个格式转换单元测试 |
 | 0.7.0 | 2026-05-21 | 修复 DeepSeek 400 错误（reasoning_content 缺失）、MiniMax SSE 流式响应问题（透传路径强制 stream=false）、启动时自动杀旧进程防端口冲突、诊断日志（DEBUG 级别）、stop/start 脚本改进 |
 | 0.7.1 | 2026-05-21 | 新增：Claude Code 配置自动备份（首次修改前备份，仅一次）、Web UI 一键恢复原始配置 |
+| 0.7.2 | 2026-05-22 | 新增：工具名 sanitize（/ : 空格等特殊字符→_，防上游 400）、Schema 清理（递归移除 $schema / additionalProperties: false，提高兼容性）；增强：README Badges 和结构优化 |
 
 
 ## 项目目录结构
