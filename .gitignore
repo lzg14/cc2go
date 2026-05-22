@@ -41,6 +41,3 @@ build/
 *.spec
 release/
 cc2go-*.zip
-
-# 文档目录（本地草稿）
-docs/

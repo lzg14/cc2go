@@ -56,7 +56,7 @@ git push && git push --tags
 
 | 版本 | 日期 | 主要变更 |
 |------|------|---------|
-| 0.7.3 | 2026-05-22 | 新增：PyPI 发布支持 (`pip install cc2go`)、`cc2go` CLI 命令、`src/__init__.py` 包结构、README 截图和 CI/PyPI badges 增强 |
+| 0.7.3 | 2026-05-22 | 新增：PyPI 发布支持 (`pip install cc2go`)、`cc2go` CLI 命令、`src/__init__.py` 包结构；首次启动引导（API Key 未配置警告横幅）、新版本检测横幅（GitHub API）；默认端口改为 4001 |
 | 0.5.0 | 2026-05-17 | 初始开发：格式转换、系统托盘、打包脚本、工具调用循环 |
 | 0.5.0+ | 2026-05-17 | 新增：流式 SSE 转换（streaming.py）、MCP web_search 短路（mcp_bypass.py）、错误分类与自适应重试（error_handler.py）、自定义模型 display_name 支持、auto-ID 生成、output_config 修复、Cache-Control 缓存防过期、mmx Windows 路径修复、54 个单元测试 |
 | 0.6.0 | 2026-05-17 | 模型 UI 重构（预置/自定义分区、编辑按钮）、托盘简化（仅管理页+退出）、thinking 块三路处理（透传/摘除/转换）、DeepSeek reasoning_content 修复（tool_calls 消息自动补空）、自定义模型按 id 路由匹配（避免预置模型名冲突）、错误归档增强、19 个格式转换单元测试 |
