@@ -557,7 +557,8 @@ async function save(keys) {
   }
 }
 async function selectModel(name) {
-  await api('PUT','/api/config',{selected_model:name});
+  const cfg = await api('GET','/api/config');
+  await api('PUT','/api/config',{selected_model:name, router_port:cfg.router_port});
   await load();
   toast(t('switched')+': '+name);
 }
