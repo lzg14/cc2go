@@ -21,9 +21,6 @@
   <em>Web admin page — switch models, add endpoints, view logs</em>
 </p>
 
-<!-- TODO: 截图就绪后 git add static/screenshot.png 补上 -->
-<!--       可裁剪为 800px 宽，展示模型列表 + 配置面板即可 -->
-
 ## Features
 
 - 🔄 **Protocol translation** — Converts Anthropic Messages API ↔ OpenAI Chat Completions
