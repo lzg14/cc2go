@@ -241,6 +241,8 @@ def setup_logger():
     logger.setLevel(getattr(logging, config.log_level.upper()))
     file_handler = RotatingFileHandler(config.log_file, encoding="utf-8", maxBytes=5*1024*1024, backupCount=3)
     console_handler = logging.StreamHandler()
+    file_handler.setLevel(getattr(logging, config.log_level.upper()))
+    console_handler.setLevel(getattr(logging, config.log_level.upper()))
     formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
     file_handler.setFormatter(formatter)
     console_handler.setFormatter(formatter)
@@ -1340,7 +1342,7 @@ def main():
     print("╚═══════════════════════════════════════════════════════════╝")
     print()
 
-    uvicorn.run(app, host=config.router_host, port=config.router_port, log_level="info")
+    uvicorn.run(app, host=config.router_host, port=config.router_port, log_level=config.log_level.lower())
 
 
 if __name__ == "__main__":
