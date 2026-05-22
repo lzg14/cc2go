@@ -1,4 +1,4 @@
-# cc2go <small>v0.7.3</small>
+# cc2go <small>v0.7.4</small>
 
 <p align="center">
   <b>Claude Code → OpenCode Go Adapter</b>
@@ -23,7 +23,7 @@
 
 ## Features
 
-- 🔄 **Protocol translation** — Converts Anthropic Messages API ↔ OpenAI Chat Completions
+- 🔄 **Protocol translation** — Converts Anthropic Messages API to OpenAI Chat Completions
 - 🌐 **Web UI** — Built-in admin page at `http://localhost:4001`, click to switch models
 - 🎯 **Model switching** — Click to switch models, auto-syncs to Claude Code settings
 - ➕ **Custom models** — Add your own endpoints with independent API keys and URLs
