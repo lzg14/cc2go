@@ -390,6 +390,10 @@ cc2go/
 ├── data/                   # 运行时数据（gitignored）
 ├── logs/                   # 日志（gitignored）
 ├── error-archive/          # 错误现场归档（gitignored）
+├── docs/                   # 文档（git 管理）
+│   ├── archive/            # 过时文档归档
+│   ├── plans/              # 功能实施计划
+│   └── *.md                # 审查报告等
 ├── build_release.py        # PyInstaller 打包
 ├── SPEC.md                 # 版本管理规范
 ├── README.md               # 项目说明
