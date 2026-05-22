@@ -4,8 +4,11 @@ SSE 流式响应转换器
 """
 
 import json
+import logging
 import uuid
 from typing import AsyncGenerator, Dict
+
+logger = logging.getLogger(__name__)
 
 
 def build_message_start_event(msg_id: str, model: str) -> Dict:
@@ -88,90 +91,94 @@ async def convert_openai_stream_to_anthropic(
     # Anthropic input_json_delta 期望完整 partial_json）
     _args_accumulator: Dict[int, str] = {}
 
-    async for line in response.aiter_lines():
-        line = line.strip()
-        if not line or not line.startswith("data: "):
-            continue
+    try:
+        async for line in response.aiter_lines():
+            line = line.strip()
+            if not line or not line.startswith("data: "):
+                continue
 
-        data_str = line[6:]
-        if data_str in ("[DONE]", ""):
-            if current_block_type is not None:
-                yield format_sse_event(build_content_block_stop(block_index), "content_block_stop")
-            yield format_sse_event(build_message_stop_event(), "message_stop")
-            continue
-
-        try:
-            chunk = json.loads(data_str)
-        except json.JSONDecodeError:
-            continue
-
-        choices = chunk.get("choices", [])
-        if not choices:
-            continue
-
-        choice = choices[0]
-        delta = choice.get("delta", {})
-        finish_reason = choice.get("finish_reason")
-
-        if not has_sent_message_start:
-            has_sent_message_start = True
-            yield format_sse_event(build_message_start_event(msg_id, model), "message_start")
-
-        content = delta.get("content", "")
-        tool_calls = delta.get("tool_calls", [])
-
-        if content:
-            if current_block_type != "text":
+            data_str = line[6:]
+            if data_str in ("[DONE]", ""):
                 if current_block_type is not None:
                     yield format_sse_event(build_content_block_stop(block_index), "content_block_stop")
-                    block_index += 1
-                current_block_type = "text"
-                yield format_sse_event(
-                    build_content_block_start(block_index, "text"), "content_block_start"
-                )
-            yield format_sse_event(
-                build_content_block_delta(block_index, "text_delta", content),
-                "content_block_delta"
-            )
+                yield format_sse_event(build_message_stop_event(), "message_stop")
+                continue
 
-        for tc in tool_calls:
-            tc_id = tc.get("id", "")
-            func = tc.get("function", {})
-            tc_name = func.get("name", "")
-            tc_input = func.get("arguments", "")
+            try:
+                chunk = json.loads(data_str)
+            except json.JSONDecodeError:
+                continue
 
-            if tc_id and tc_name:
-                if current_block_type is not None:
-                    yield format_sse_event(build_content_block_stop(block_index), "content_block_stop")
-                    block_index += 1
-                current_block_type = "tool_use"
-                # 新 block 重置累积器
-                _args_accumulator.pop(block_index, None)
-                yield format_sse_event(
-                    build_content_block_start(block_index, "tool_use", id=tc_id, name=tc_name),
-                    "content_block_start"
-                )
+            choices = chunk.get("choices", [])
+            if not choices:
+                continue
 
-            if tc_input:
-                prev = _args_accumulator.get(block_index, "")
-                _args_accumulator[block_index] = prev + tc_input
+            choice = choices[0]
+            delta = choice.get("delta", {})
+            finish_reason = choice.get("finish_reason")
+
+            if not has_sent_message_start:
+                has_sent_message_start = True
+                yield format_sse_event(build_message_start_event(msg_id, model), "message_start")
+
+            content = delta.get("content", "")
+            tool_calls = delta.get("tool_calls", [])
+
+            if content:
+                if current_block_type != "text":
+                    if current_block_type is not None:
+                        yield format_sse_event(build_content_block_stop(block_index), "content_block_stop")
+                        block_index += 1
+                    current_block_type = "text"
+                    yield format_sse_event(
+                        build_content_block_start(block_index, "text"), "content_block_start"
+                    )
                 yield format_sse_event(
-                    build_content_block_delta(block_index, "input_json_delta", _args_accumulator[block_index]),
+                    build_content_block_delta(block_index, "text_delta", content),
                     "content_block_delta"
                 )
 
-        if finish_reason in ("stop", "length", "tool_calls"):
-            if current_block_type is not None:
-                yield format_sse_event(build_content_block_stop(block_index), "content_block_stop")
-            stop_reason_map = {
-                "stop": "end_turn",
-                "length": "max_tokens",
-                "tool_calls": "tool_use",
-            }
-            stop_reason = stop_reason_map.get(finish_reason, finish_reason)
-            usage = chunk.get("usage", {})
-            yield format_sse_event(
-                build_message_delta_event(stop_reason, usage),
-                "message_delta"
-            )
-            yield format_sse_event(build_message_stop_event(), "message_stop")
+            for tc in tool_calls:
+                tc_id = tc.get("id", "")
+                func = tc.get("function", {})
+                tc_name = func.get("name", "")
+                tc_input = func.get("arguments", "")
+
+                if tc_id and tc_name:
+                    if current_block_type is not None:
+                        yield format_sse_event(build_content_block_stop(block_index), "content_block_stop")
+                        block_index += 1
+                    current_block_type = "tool_use"
+                    # 新 block 重置累积器
+                    _args_accumulator.pop(block_index, None)
+                    yield format_sse_event(
+                        build_content_block_start(block_index, "tool_use", id=tc_id, name=tc_name),
+                        "content_block_start"
+                    )
+
+                if tc_input:
+                    prev = _args_accumulator.get(block_index, "")
+                    _args_accumulator[block_index] = prev + tc_input
+                    yield format_sse_event(
+                        build_content_block_delta(block_index, "input_json_delta", _args_accumulator[block_index]),
+                        "content_block_delta"
+                    )
+
+            if finish_reason in ("stop", "length", "tool_calls"):
+                if current_block_type is not None:
+                    yield format_sse_event(build_content_block_stop(block_index), "content_block_stop")
+                stop_reason_map = {
+                    "stop": "end_turn",
+                    "length": "max_tokens",
+                    "tool_calls": "tool_use",
+                }
+                stop_reason = stop_reason_map.get(finish_reason, finish_reason)
+                usage = chunk.get("usage", {})
+                yield format_sse_event(
+                    build_message_delta_event(stop_reason, usage),
+                    "message_delta"
+                )
+                yield format_sse_event(build_message_stop_event(), "message_stop")
+    except Exception:
+        logger.debug("上游连接断开或流式转换异常，Generator 安全退出")
+        return
