@@ -311,18 +311,6 @@ def save_stats_unlocked():
     except Exception:
         pass
 
-def save_stats(force=False):
-    global _stats_dirty
-    with _stats_lock:
-        _stats_dirty += 1
-        if not force and _stats_dirty < 10:
-            return
-        try:
-            with open(STATS_FILE, "w") as f:
-                json.dump({"requests": request_count, "errors": error_count}, f)
-            _stats_dirty = 0
-        except Exception:
-            pass
 stats = load_stats()
 request_count = stats["requests"]
 error_count = stats["errors"]
