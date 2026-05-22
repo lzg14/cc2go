@@ -161,7 +161,7 @@ class Config:
         self.detailed_logging = os.getenv("DETAILED_LOGGING", "true").lower() == "true"
         self.selected_model = os.getenv("SELECTED_MODEL", "")
         self.claude_model_alias = os.getenv("CLAUDE_MODEL_ALIAS", "")
-        self.claude_settings_path = os.getenv("CLAUDE_SETTINGS_PATH", os.path.expanduser("~/.claude/settings.json"))
+        self.claude_settings_path = os.path.expanduser(os.getenv("CLAUDE_SETTINGS_PATH", "~/.claude/settings.json"))
         _archive_dir = os.getenv("ERROR_ARCHIVE_DIR", os.path.join(get_base_dir(), "error-archive"))
         if not os.path.isabs(_archive_dir):
             _archive_dir = os.path.join(get_base_dir(), _archive_dir)
