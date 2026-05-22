@@ -19,6 +19,7 @@ A lightweight proxy that translates [Claude Code](https://claude.ai) (Anthropic 
 - 🖥️ **System tray** — Tray icon for opening admin page and quitting; auto-opens admin on start
 - 💰 **Token saving** — Strips `<system-reminder>`, `[思考过程]` reasoning, and `thinking` blocks before forwarding upstream
 - 💾 **Config backup** — Auto-backup original Claude Code config on first model switch; one-click restore from admin UI
+- 🔑 **Security** — Defaults to 127.0.0.1 (local-only), Bearer Token authentication on proxy endpoints
 
 ---
 

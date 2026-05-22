@@ -32,7 +32,36 @@ from error_handler import (
     _archive_limiter as error_archive_limiter,
 )
 
-load_dotenv()
+
+def verify_master_key(request: Request) -> None:
+    """Verify that the request has a valid Authorization header matching the configured master key"""
+    authorization = request.headers.get("Authorization")
+    if not authorization:
+        raise HTTPException(
+            status_code=401,
+            detail="Missing Authorization header",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    try:
+        scheme, token = authorization.split(" ", 1)
+    except ValueError:
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid Authorization header format",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    if scheme.lower() != "bearer":
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid authentication scheme",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    if token != config.master_key:
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid API key",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
 
 
 def get_base_dir():
@@ -119,8 +148,8 @@ class Config:
         self.opencode_base_url = os.getenv("OPENCODE_BASE_URL", "https://opencode.ai/zen/go")
         self.opencode_api_key = os.getenv("OPENCODE_API_KEY", "")
         self.router_port = int(os.getenv("ROUTER_PORT", "4000"))
-        self.router_host = os.getenv("ROUTER_HOST", "0.0.0.0")
-        self.master_key = os.getenv("ROUTER_MASTER_KEY", "sk-litellm-local")
+        self.router_host = os.getenv("ROUTER_HOST", "127.0.0.1")
+        self.master_key = os.getenv("ROUTER_MASTER_KEY", "sk-cc2go-local")
         self.max_retry = int(os.getenv("MAX_RETRY", "3"))
         self.retry_delay = float(os.getenv("RETRY_DELAY", "1.0"))
         self.log_level = os.getenv("LOG_LEVEL", "INFO")
@@ -675,6 +704,8 @@ async def anthropic_messages(request: Request):
     """
     Claude 格式入口 - 完整支持 tool_calls 循环
     """
+    # Verify master key authentication
+    verify_master_key(request)
     global request_count, error_count
     start_time = time.time()
     model_name = None
@@ -891,6 +922,8 @@ async def anthropic_messages(request: Request):
 @app.post("/v1/chat/completions")
 async def chat_completions(request: Request):
     """OpenAI 格式入口（透传）"""
+    # Verify master key authentication
+    verify_master_key(request)
     global request_count
     start_time = time.time()
 
