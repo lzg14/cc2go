@@ -1,6 +1,6 @@
 # cc2go 版本管理规范 (SPEC)
 
-> 当前版本：0.7.3 | 更新：2026-05-22
+> 当前版本：0.7.4 | 更新：2026-05-22
 > 技术架构参见 [ARCHITECTURE.md](ARCHITECTURE.md)
 
 ---
@@ -57,6 +57,7 @@ git push && git push --tags
 
 | 版本 | 日期 | 主要变更 |
 |------|------|---------|
+| 0.7.4 | 2026-05-22 | 修复：ADMIN_HTML 分离到 static/index.html（router.py 减少 ~660 行）、删除 save_stats() 冗余函数、streaming.py 添加上游断开异常处理；默认监听改为 127.0.0.1 |
 | 0.7.3 | 2026-05-22 | 新增：PyPI 发布支持 (`pip install cc2go`)、`cc2go` CLI 命令、`src/__init__.py` 包结构；首次启动引导（API Key 未配置警告横幅）、新版本检测横幅（GitHub API）；默认端口改为 4001 |
 | 0.5.0 | 2026-05-17 | 初始开发：格式转换、系统托盘、打包脚本、工具调用循环 |
 | 0.5.0+ | 2026-05-17 | 新增：流式 SSE 转换（streaming.py）、MCP web_search 短路（mcp_bypass.py）、错误分类与自适应重试（error_handler.py）、自定义模型 display_name 支持、auto-ID 生成、output_config 修复、Cache-Control 缓存防过期、mmx Windows 路径修复、54 个单元测试 |

@@ -102,7 +102,7 @@ def update_archive_limiter(interval_seconds: int):
     error_archive_limiter.update(max(interval_seconds, 1))
 
 
-VERSION = "0.7.3"
+VERSION = "0.7.4"
 
 # ============ 配置 ============
 DEFAULT_MODELS = {
