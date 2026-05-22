@@ -253,9 +253,9 @@ def setup_logger():
 logger = setup_logger()
 
 if not config.opencode_api_key:
-    logger.warning("⚠️ OPENCODE_API_KEY 未配置！请在 Web UI 的「连接」设置中配置，或创建 .env 文件")
+    logger.warning("[!] OPENCODE_API_KEY 未配置！请在 Web UI 的「连接」设置中配置，或创建 .env 文件")
 else:
-    logger.info("✅ OpenCode Go API Key 已配置")
+    logger.info("[OK] OpenCode Go API Key 已配置")
 
 # ============ FastAPI ============
 app = FastAPI(title="cc2go", description="Claude Code → OpenCode Go 格式适配器")
@@ -1328,18 +1328,16 @@ def main():
     """cc2go CLI entry point: start the FastAPI server"""
     config.models = merge_models(DEFAULT_MODELS, load_custom_models())
     print()
-    print("╔═══════════════════════════════════════════════════════════╗")
-    version_str = f"cc2go v{VERSION}"
-    print(f"║ {version_str.center(55)} ║")
-    print("║          Claude Code → OpenCode Go 适配器               ║")
-    print("╠═══════════════════════════════════════════════════════════╣")
-    print(f"║  监听: http://{config.router_host}:{config.router_port}                              ║")
-    print(f"║  API:  {config.opencode_base_url}           ║")
-    print("╠═══════════════════════════════════════════════════════════╣")
-    print("║  模型:                                                 ║")
+    print("=" * 60)
+    print(f"  cc2go v{VERSION}  --  Claude Code -> OpenCode Go")
+    print("=" * 60)
+    print(f"  监听: http://{config.router_host}:{config.router_port}")
+    print(f"  API:  {config.opencode_base_url}")
+    print("-" * 60)
+    print("  模型:")
     for i, name in enumerate(list(config.models.keys())):
-        print(f"║    • {name:<22}                          ║")
-    print("╚═══════════════════════════════════════════════════════════╝")
+        print(f"    - {name}")
+    print("=" * 60)
     print()
 
     uvicorn.run(app, host=config.router_host, port=config.router_port, log_level=config.log_level.lower())
