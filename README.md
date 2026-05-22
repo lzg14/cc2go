@@ -18,6 +18,7 @@ A lightweight proxy that translates [Claude Code](https://claude.ai) (Anthropic 
 - 📋 **Log management** — Built-in log viewer with rotation (5MB per file, 3 backups)
 - 🖥️ **System tray** — Tray icon for opening admin page and quitting; auto-opens admin on start
 - 💰 **Token saving** — Strips `<system-reminder>`, `[思考过程]` reasoning, and `thinking` blocks before forwarding upstream
+- 💾 **Config backup** — Auto-backup original Claude Code config on first model switch; one-click restore from admin UI
 
 ---
 

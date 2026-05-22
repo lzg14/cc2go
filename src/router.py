@@ -73,7 +73,7 @@ def update_archive_limiter(interval_seconds: int):
     error_archive_limiter.update(max(interval_seconds, 1))
 
 
-VERSION = "0.7.0"
+VERSION = "0.7.1"
 
 # ============ 配置 ============
 DEFAULT_MODELS = {
@@ -996,8 +996,42 @@ def update_env_file(**kwargs):
     config.reload()
 
 
+def backup_claude_settings():
+    """首次修改前备份原始 ~/.claude/settings.json，仅备份一次"""
+    path = config.claude_settings_path
+    if not path or not os.path.exists(path):
+        logger.debug("[Backup] settings.json 不存在，跳过备份")
+        return
+
+    backup_dir = os.path.join(get_base_dir(), "data", "claude-backups")
+    os.makedirs(backup_dir, exist_ok=True)
+
+    # 检查是否已有备份文件
+    try:
+        existing = [f for f in os.listdir(backup_dir) if f.endswith(".bak")]
+        if existing:
+            logger.debug(f"[Backup] 备份已存在 ({len(existing)} 个)，跳过")
+            return
+    except OSError:
+        pass
+
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    backup_path = os.path.join(backup_dir, f"settings.json.{timestamp}.bak")
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            content = f.read()
+        with open(backup_path, "w", encoding="utf-8") as f:
+            f.write(content)
+        logger.info(f"[Backup] 已备份原始配置: {backup_path}")
+    except Exception as e:
+        logger.warning(f"[Backup] 备份失败: {e}")
+
+
 def sync_claude_settings():
     """同步路由器配置到 Claude Code 的 settings.json（模型名、Base URL、Auth Token）"""
+    # 修改前备份原始配置（仅首次）
+    backup_claude_settings()
+
     model_name = config.selected_model
     display_name = config.claude_model_alias or model_name
     base_url = f"http://{config.router_host}:{config.router_port}"
@@ -1144,6 +1178,51 @@ async def save_custom_models_api(models: list = Body(...)):
     return {"status": "ok", "count": len(models)}
 
 
+@app.post("/api/config/restore")
+async def restore_claude_config():
+    """从备份恢复原始 Claude Code 配置"""
+    backup_dir = os.path.join(get_base_dir(), "data", "claude-backups")
+    if not os.path.exists(backup_dir):
+        raise HTTPException(status_code=404, detail="无备份文件，无法恢复")
+
+    try:
+        backups = sorted([f for f in os.listdir(backup_dir) if f.endswith(".bak")])
+    except OSError:
+        backups = []
+    if not backups:
+        raise HTTPException(status_code=404, detail="无备份文件，无法恢复")
+
+    backup_path = os.path.join(backup_dir, backups[-1])  # 取最新的备份
+    target_path = config.claude_settings_path
+
+    if not target_path:
+        raise HTTPException(status_code=400, detail="Claude Code 配置文件路径未配置")
+
+    try:
+        with open(backup_path, "r", encoding="utf-8") as f:
+            backup_content = f.read()
+
+        # 检查是否与当前配置相同
+        if os.path.exists(target_path):
+            with open(target_path, "r", encoding="utf-8") as f:
+                current = f.read()
+            if current == backup_content:
+                return {"status": "ok", "message": "当前配置已与备份一致，无需恢复"}
+
+        with open(target_path, "w", encoding="utf-8") as f:
+            f.write(backup_content)
+
+        # 清除选中模型，使 CC 恢复为未选中状态
+        config.selected_model = ""
+        config.reload()
+
+        logger.info(f"[Restore] 已从 {backup_path} 恢复原始配置")
+        return {"status": "ok", "message": "已恢复原始配置"}
+    except Exception as e:
+        logger.error(f"[Restore] 恢复失败: {e}")
+        raise HTTPException(status_code=500, detail=f"恢复失败: {e}")
+
+
 @app.get("/", include_in_schema=False)
 async def admin_page():
     """配置管理页面"""
@@ -1263,6 +1342,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','SF Pro Display',sy
 <div class="btn-row" style="margin-bottom:6px">
 <button class="btn btn-secondary" onclick="clearCustomModalFields();openModal('customModal')">➕ <span data-i18n="addModel">新增模型</span></button>
 <button class="btn btn-secondary" onclick="editSelectedCustom()">✎ <span data-i18n="editModel">编辑模型</span></button>
+<button class="btn btn-secondary" onclick="restoreConfig()" style="border-color:#ff9f0a;color:#ff9f0a">↩ <span data-i18n="restoreConfig">恢复原始配置</span></button>
 </div>
 <div class="btn-row">
 <button class="btn btn-secondary" onclick="openModal('connModal')">🔗 <span data-i18n="opencode">连接</span></button>
@@ -1422,6 +1502,11 @@ const I18N = {
     modelUpstreamPlaceholder: "上游模型名（留空使用 ID）",
     modelKeyPlaceholder: "API Key（留空使用全局）",
     getKey: "获取 Key",
+    restoreConfig: "恢复原始配置",
+    restoreConfirm: "将恢复 ~/.claude/settings.json 的原始内容，确定要恢复吗？",
+    restoreOk: "已恢复原始配置",
+    restoreNoBackup: "没有找到备份文件",
+    restoreSame: "当前配置已与备份一致",
   },
   en: {
     opencode: "Go Connection",
@@ -1488,6 +1573,11 @@ const I18N = {
     modelUpstreamPlaceholder: "Upstream model name (leave empty = use ID)",
     modelKeyPlaceholder: "API Key (leave empty = use global)",
     getKey: "Get Key",
+    restoreConfig: "Restore Original Config",
+    restoreConfirm: "This will restore ~/.claude/settings.json to its original state. Continue?",
+    restoreOk: "Original config restored",
+    restoreNoBackup: "No backup file found",
+    restoreSame: "Current config is already the same as backup",
   },
 };
 function t(key) { return (I18N[_lang]||I18N.zh)[key]||key; }
@@ -1736,6 +1826,19 @@ async function reload() {
   } catch(e) {
     toast(t('reloadfail')+': '+e.message, false);
   }
+}
+async function restoreConfig() {
+  showConfirm(t('restoreConfirm'), async () => {
+    try {
+      const r = await fetch('/api/config/restore', {method:'POST'});
+      const data = await r.json();
+      if (!r.ok) { toast(data.detail || t('restoreNoBackup'), false); return; }
+      toast(data.message || t('restoreOk'));
+      await load();
+    } catch(e) {
+      toast(t('restoreNoBackup'), false);
+    }
+  });
 }
 applyLang();
 (async () => { await loadCustomModels(); await load(); })();
