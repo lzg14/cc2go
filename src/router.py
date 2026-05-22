@@ -102,7 +102,7 @@ def update_archive_limiter(interval_seconds: int):
     error_archive_limiter.update(max(interval_seconds, 1))
 
 
-VERSION = "0.7.2"
+VERSION = "0.7.3"
 
 # ============ 配置 ============
 DEFAULT_MODELS = {
@@ -179,8 +179,12 @@ class Config:
         logger.setLevel(getattr(logging, config.log_level.upper()))
         update_archive_limiter(config.error_archive_interval)
 
+load_dotenv()
 config = Config()
 update_archive_limiter(config.error_archive_interval)
+
+_update_cache: Dict = {"latest_version": "", "checked": False}
+_UPDATE_CHECK_LOCK = asyncio.Lock()
 
 # ============ 模型模糊匹配 ============
 # 当客户端请求的模型名在 config.models 中无精确匹配时，
@@ -245,6 +249,11 @@ def setup_logger():
     return logger
 
 logger = setup_logger()
+
+if not config.opencode_api_key:
+    logger.warning("⚠️ OPENCODE_API_KEY 未配置！请在 Web UI 的「连接」设置中配置，或创建 .env 文件")
+else:
+    logger.info("✅ OpenCode Go API Key 已配置")
 
 # ============ FastAPI ============
 app = FastAPI(title="cc2go", description="Claude Code → OpenCode Go 格式适配器")
@@ -1114,11 +1123,39 @@ def sync_claude_settings():
         return False
 
 
+async def _check_github_update():
+    async with _UPDATE_CHECK_LOCK:
+        if _update_cache["checked"]:
+            return
+        try:
+            async with httpx.AsyncClient(timeout=5) as client:
+                r = await client.get("https://api.github.com/repos/lzg14/cc2go/releases/latest")
+                if r.status_code == 200:
+                    latest = r.json().get("tag_name", "").lstrip("v")
+                    _update_cache["latest_version"] = latest
+        except Exception:
+            pass
+        _update_cache["checked"] = True
+
+
+def _is_newer_version(latest: str, current: str) -> bool:
+    try:
+        l_parts = [int(x) for x in latest.split(".")]
+        c_parts = [int(x) for x in current.split(".")]
+        for l, c in zip(l_parts, c_parts):
+            if l != c:
+                return l > c
+        return len(l_parts) > len(c_parts)
+    except Exception:
+        return False
+
+
 @app.get("/api/config")
 async def get_config_api():
     """返回当前配置（密钥脱敏）"""
     return {
         "version": VERSION,
+        "setup_complete": bool(config.opencode_api_key),
         "opencode_base_url": config.opencode_base_url,
         "opencode_api_key": mask_key(config.opencode_api_key),
         "router_host": config.router_host,
@@ -1139,6 +1176,18 @@ async def get_config_api():
             "errors": error_count,
             "error_rate": f"{min((error_count / max(request_count, 1)) * 100, 100):.1f}%"
         }
+    }
+
+
+@app.get("/api/check-update")
+async def check_update_api():
+    """检查 GitHub 是否有新版本（1 小时缓存）"""
+    await _check_github_update()
+    latest = _update_cache["latest_version"]
+    return {
+        "update_available": bool(latest) and _is_newer_version(latest, VERSION),
+        "latest_version": latest or "",
+        "current_version": VERSION,
     }
 
 
@@ -1339,7 +1388,16 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','SF Pro Display',sy
 .status-dot{width:8px;height:8px;border-radius:50%;display:inline-block;vertical-align:middle}
 .status-dot.ok{background:#30d158}
 .status-dot.err{background:#ff3b30}
-.toast{position:fixed;bottom:28px;left:50%;transform:translateX(-50%);background:#1d1d1f;color:#fff;padding:12px 24px;border-radius:12px;font-size:14px;opacity:0;transition:opacity .3s;pointer-events:none;z-index:200;box-shadow:0 8px 30px rgba(0,0,0,.2)}
+ .banner{padding:10px 16px;border-radius:12px;font-size:13px;margin-bottom:12px;display:flex;align-items:center;gap:8px;line-height:1.4}
+ .banner-warning{background:#fff3cd;color:#856404;border:1px solid #ffc107}
+ .banner-info{background:#cce5ff;color:#004085;border:1px solid #b8daff}
+ .banner-close{margin-left:auto;cursor:pointer;opacity:.6;background:none;border:none;font-size:18px;color:inherit;padding:0 6px;line-height:1}
+ .banner-close:hover{opacity:1}
+ @media(prefers-color-scheme:dark){
+  .banner-warning{background:#3d3200;color:#ffd760;border-color:#665500}
+  .banner-info{background:#002240;color:#8bbfff;border-color:#003366}
+ }
+ .toast{position:fixed;bottom:28px;left:50%;transform:translateX(-50%);background:#1d1d1f;color:#fff;padding:12px 24px;border-radius:12px;font-size:14px;opacity:0;transition:opacity .3s;pointer-events:none;z-index:200;box-shadow:0 8px 30px rgba(0,0,0,.2)}
 .toast.show{opacity:1}
 @media(prefers-color-scheme:dark){
  body{background:#1c1c1e;color:#f5f5f7}
@@ -1384,6 +1442,15 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','SF Pro Display',sy
 <span><span data-i18n="errRate">错误率</span>: <strong id="statErrorRate">-</strong></span>
 </div>
 </div>
+</div>
+
+<div id="setupBanner" class="banner banner-warning" style="display:none">
+  <span id="setupBannerText"></span>
+  <button class="banner-close" onclick="this.parentElement.style.display='none'">✕</button>
+</div>
+<div id="updateBanner" class="banner banner-info" style="display:none">
+  <span id="updateBannerText"></span>
+  <button class="banner-close" onclick="this.parentElement.style.display='none'">✕</button>
 </div>
 
 <div class="card">
@@ -1561,6 +1628,9 @@ const I18N = {
     restoreOk: "已恢复原始配置",
     restoreNoBackup: "没有找到备份文件",
     restoreSame: "当前配置已与备份一致",
+    setupDesc: "⚠️ 请先在「连接」中配置 OpenCode Go 的 Base URL 和 API Key",
+    updateTitle: "📦 新版本",
+    updateDesc: "前往 GitHub 下载",
   },
   en: {
     opencode: "Go Connection",
@@ -1902,7 +1972,8 @@ applyLang();
 </html>"""
 
 # ============ 启动 ============
-if __name__ == "__main__":
+def main():
+    """cc2go CLI entry point: start the FastAPI server"""
     config.models = merge_models(DEFAULT_MODELS, load_custom_models())
     print()
     print("╔═══════════════════════════════════════════════════════════╗")
@@ -1920,3 +1991,7 @@ if __name__ == "__main__":
     print()
 
     uvicorn.run(app, host=config.router_host, port=config.router_port, log_level="info")
+
+
+if __name__ == "__main__":
+    main()

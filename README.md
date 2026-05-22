@@ -11,6 +11,14 @@
   <img src="https://img.shields.io/github/license/lzg14/cc2go" alt="License">
   <img src="https://img.shields.io/github/v/release/lzg14/cc2go" alt="Release">
   <img src="https://img.shields.io/github/stars/lzg14/cc2go" alt="Stars">
+  <img src="https://img.shields.io/github/actions/workflow/status/lzg14/cc2go/ci.yml?branch=master" alt="CI">
+  <img src="https://img.shields.io/pypi/v/cc2go" alt="PyPI">
+</p>
+
+<p align="center">
+  <img src="docs/screenshot.png" alt="cc2go Web UI" width="800">
+  <br>
+  <em>Web admin page — switch models, add endpoints, view logs</em>
 </p>
 
 ## Features
