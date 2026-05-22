@@ -1,6 +1,6 @@
 Metadata-Version: 2.4
 Name: cc2go
-Version: 0.7.4
+Version: 0.7.5
 Summary: Claude Code to OpenCode Go adapter — route Anthropic format to OpenAI models
 Author: lzg14
 License: MIT
@@ -30,7 +30,7 @@ Requires-Dist: pystray>=0.19.0
 Requires-Dist: Pillow>=10.0.0
 Dynamic: license-file
 
-# cc2go <small>v0.7.3</small>
+# cc2go <small>v0.7.5</small>
 
 <p align="center">
   <b>Claude Code → OpenCode Go Adapter</b>
@@ -55,7 +55,7 @@ Dynamic: license-file
 
 ## Features
 
-- 🔄 **Protocol translation** — Converts Anthropic Messages API ↔ OpenAI Chat Completions
+- 🔄 **Protocol translation** — Converts Anthropic Messages API to OpenAI Chat Completions
 - 🌐 **Web UI** — Built-in admin page at `http://localhost:4001`, click to switch models
 - 🎯 **Model switching** — Click to switch models, auto-syncs to Claude Code settings
 - ➕ **Custom models** — Add your own endpoints with independent API keys and URLs

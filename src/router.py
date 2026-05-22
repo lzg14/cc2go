@@ -14,7 +14,7 @@ import logging
 import asyncio
 import threading
 from datetime import datetime
-from typing import List, Dict
+from typing import Any, List, Dict
 
 import httpx
 import uvicorn
@@ -1132,9 +1132,9 @@ def _is_newer_version(latest: str, current: str) -> bool:
     try:
         l_parts = [int(x) for x in latest.split(".")]
         c_parts = [int(x) for x in current.split(".")]
-        for l, c in zip(l_parts, c_parts):
-            if l != c:
-                return l > c
+        for lp, cp in zip(l_parts, c_parts):
+            if lp != cp:
+                return lp > cp
         return len(l_parts) > len(c_parts)
     except Exception:
         return False
