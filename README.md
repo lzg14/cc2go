@@ -16,10 +16,13 @@
 </p>
 
 <p align="center">
-  <img src="docs/screenshot.png" alt="cc2go Web UI" width="800">
+  <img src="static/screenshot.png" alt="cc2go Web UI" width="800">
   <br>
   <em>Web admin page — switch models, add endpoints, view logs</em>
 </p>
+
+<!-- TODO: 截图就绪后 git add static/screenshot.png 补上 -->
+<!--       可裁剪为 800px 宽，展示模型列表 + 配置面板即可 -->
 
 ## Features
 
