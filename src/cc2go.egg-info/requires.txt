@@ -1,0 +1,6 @@
+fastapi
+uvicorn
+httpx
+python-dotenv
+pystray>=0.19.0
+Pillow>=10.0.0

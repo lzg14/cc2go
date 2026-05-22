@@ -1,4 +1,36 @@
-# cc2go <small>v0.7.5</small>
+Metadata-Version: 2.4
+Name: cc2go
+Version: 0.7.4
+Summary: Claude Code to OpenCode Go adapter — route Anthropic format to OpenAI models
+Author: lzg14
+License: MIT
+Project-URL: Homepage, https://github.com/lzg14/cc2go
+Project-URL: Source, https://github.com/lzg14/cc2go
+Project-URL: BugTracker, https://github.com/lzg14/cc2go/issues
+Keywords: claude-code,opencode,llm-proxy,ai-adapter,anthropic,openai
+Classifier: Development Status :: 4 - Beta
+Classifier: Environment :: Web Environment
+Classifier: Intended Audience :: Developers
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.9
+Classifier: Programming Language :: Python :: 3.10
+Classifier: Programming Language :: Python :: 3.11
+Classifier: Programming Language :: Python :: 3.12
+Classifier: Topic :: Internet :: Proxy Servers
+Classifier: Topic :: Scientific/Engineering :: Artificial Intelligence
+Requires-Python: >=3.9
+Description-Content-Type: text/markdown
+License-File: LICENSE
+Requires-Dist: fastapi
+Requires-Dist: uvicorn
+Requires-Dist: httpx
+Requires-Dist: python-dotenv
+Requires-Dist: pystray>=0.19.0
+Requires-Dist: Pillow>=10.0.0
+Dynamic: license-file
+
+# cc2go <small>v0.7.3</small>
 
 <p align="center">
   <b>Claude Code → OpenCode Go Adapter</b>
@@ -23,7 +55,7 @@
 
 ## Features
 
-- 🔄 **Protocol translation** — Converts Anthropic Messages API to OpenAI Chat Completions
+- 🔄 **Protocol translation** — Converts Anthropic Messages API ↔ OpenAI Chat Completions
 - 🌐 **Web UI** — Built-in admin page at `http://localhost:4001`, click to switch models
 - 🎯 **Model switching** — Click to switch models, auto-syncs to Claude Code settings
 - ➕ **Custom models** — Add your own endpoints with independent API keys and URLs

@@ -1,0 +1,14 @@
+LICENSE
+README.md
+pyproject.toml
+src/error_handler.py
+src/mcp_bypass.py
+src/router.py
+src/streaming.py
+src/tray.py
+src/cc2go.egg-info/PKG-INFO
+src/cc2go.egg-info/SOURCES.txt
+src/cc2go.egg-info/dependency_links.txt
+src/cc2go.egg-info/entry_points.txt
+src/cc2go.egg-info/requires.txt
+src/cc2go.egg-info/top_level.txt
