@@ -1,6 +1,7 @@
 # cc2go 版本管理规范 (SPEC)
 
 > 当前版本：0.7.3 | 更新：2026-05-22
+> 技术架构参见 [ARCHITECTURE.md](ARCHITECTURE.md)
 
 ---
 
@@ -63,53 +64,6 @@ git push && git push --tags
 | 0.7.0 | 2026-05-21 | 修复 DeepSeek 400 错误（reasoning_content 缺失）、MiniMax SSE 流式响应问题（透传路径强制 stream=false）、启动时自动杀旧进程防端口冲突、诊断日志（DEBUG 级别）、stop/start 脚本改进 |
 | 0.7.1 | 2026-05-21 | 新增：Claude Code 配置自动备份（首次修改前备份，仅一次）、Web UI 一键恢复原始配置 |
 | 0.7.2 | 2026-05-22 | 新增：工具名 sanitize（/ : 空格等特殊字符→_，防上游 400）、Schema 清理（递归移除 $schema / additionalProperties: false，提高兼容性）；增强：README Badges 和结构优化 |
-
-
-## 项目目录结构
-
-```
-cc2go/
-├── src/                    # 源码
-│   ├── router.py           # 主服务：格式转换 + API 端点 + Web UI
-│   ├── router_test.py      # 格式转换单元测试（19 用例）
-│   ├── tray.py             # 系统托盘（仅管理页 + 退出）
-│   ├── streaming.py        # 流式 SSE 转换 (OpenAI → Anthropic)
-│   ├── streaming_test.py   # 流式转换测试 (16 用例)
-│   ├── mcp_bypass.py       # MCP web_search 短路 (mmx CLI)
-│   ├── mcp_bypass_test.py  # 短路模块测试 (14 用例)
-│   ├── error_handler.py    # 错误分类 + 指数退避 + 归档限速
-│   └── error_handler_test.py # 错误处理测试 (24 用例)
-├── scripts/                # 启动/停止脚本
-│   ├── start_bg.bat        # Windows 托盘启动
-│   ├── stop.bat            # Windows 停止
-│   ├── start.sh            # Linux/Mac 启动
-│   └── stop.sh             # Linux/Mac 停止
-├── static/                 # Web UI 静态资源
-├── data/                   # 运行时数据 (gitignored)
-├── logs/                   # 日志 (gitignored)
-├── error-archive/          # 错误归档 (gitignored)
-├── build_release.py        # PyInstaller 打包脚本
-├── requirements.txt        # Python 依赖
-├── .env.example            # 配置模板
-├── SPEC.md                 # 本文件
-├── README.md               # 项目说明
-├── ARCHITECTURE.md         # 架构文档
-└── .gitignore
-```
-
-
-## API 端点
-
-| 端点 | 方法 | 兼容承诺 |
-|------|------|---------|
-| `/v1/messages` | POST | 次版本内只增字段 |
-| `/v1/chat/completions` | POST | OpenAI 兼容透传 |
-| `/v1/models` | GET | 标准格式 |
-| `/health` | GET | 只增字段 |
-| `/api/config` | GET/PUT | 只增字段 |
-| `/api/custom-models` | GET/PUT | 格式稳定 |
-| `/api/logs` | GET | 格式稳定 |
-| `/api/refresh-models` | POST | 格式稳定 |
 
 
 ## 提交规范

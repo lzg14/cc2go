@@ -367,6 +367,21 @@ MiniMax 的预置模型（endpoint=`/v1/messages`）额外处理：
 
 ---
 
+## API 端点
+
+| 端点 | 方法 | 兼容承诺 |
+|------|------|---------|
+| `/v1/messages` | POST | 次版本内只增字段 |
+| `/v1/chat/completions` | POST | OpenAI 兼容透传 |
+| `/v1/models` | GET | 标准格式 |
+| `/health` | GET | 只增字段 |
+| `/api/config` | GET/PUT | 只增字段 |
+| `/api/custom-models` | GET/PUT | 格式稳定 |
+| `/api/logs` | GET | 格式稳定 |
+| `/api/refresh-models` | POST | 格式稳定 |
+
+---
+
 ## 目录结构
 
 ```
