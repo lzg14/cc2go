@@ -509,6 +509,26 @@ def convert_anthropic_messages_to_openai(messages: List[Dict]) -> List[Dict]:
     return openai_messages
 
 
+def sanitize_tool_name(name: str) -> str:
+    name = name.strip()
+    name = re.sub(r'[^a-zA-Z0-9_.\-]', '_', name)
+    name = re.sub(r'_+', '_', name)
+    name = name.strip('_')
+    return name if name else "unknown_tool"
+
+
+def clean_schema(obj: Any) -> Any:
+    if isinstance(obj, dict):
+        obj.pop("$schema", None)
+        additional_props = obj.get("additionalProperties")
+        if additional_props is False:
+            obj.pop("additionalProperties", None)
+        return {k: clean_schema(v) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [clean_schema(item) for item in obj]
+    return obj
+
+
 def convert_tools(tools: List[Dict]) -> List[Dict]:
     """将 Claude 格式的工具转换为 OpenAI 格式"""
     if not tools:
@@ -516,7 +536,6 @@ def convert_tools(tools: List[Dict]) -> List[Dict]:
 
     openai_tools = []
     for tool in tools:
-        # Claude 格式可能是 function.name 或者 直接是 name
         func = tool.get("function", {})
         name = func.get("name", "") or tool.get("name", "")
         name = name.strip()
@@ -525,9 +544,11 @@ def convert_tools(tools: List[Dict]) -> List[Dict]:
             logger.warning(f"[Tool] Skipping tool with empty name: {tool}")
             continue
 
-        # 获取描述和参数
+        name = sanitize_tool_name(name)
+
         description = func.get("description", "") or tool.get("description", "") or ""
         parameters = func.get("parameters", {}) or tool.get("input_schema", {}) or {"type": "object", "properties": {}}
+        parameters = clean_schema(parameters)
 
         openai_tools.append({
             "type": "function",

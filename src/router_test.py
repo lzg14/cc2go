@@ -6,7 +6,7 @@ import os
 sys.path.insert(0, os.path.dirname(__file__))
 
 import unittest
-from router import convert_anthropic_messages_to_openai
+from router import convert_anthropic_messages_to_openai, convert_tools, sanitize_tool_name, clean_schema
 
 
 class TestConvertMessages(unittest.TestCase):
@@ -335,6 +335,128 @@ class TestConvertMessages(unittest.TestCase):
         self.assertEqual(result[0]["content"], "请执行命令")
         self.assertEqual(result[1]["role"], "tool")
         self.assertEqual(result[1]["tool_call_id"], "call_001")
+
+
+class TestSanitizeToolName(unittest.TestCase):
+    """sanitize_tool_name 测试"""
+
+    def test_already_clean(self):
+        self.assertEqual(sanitize_tool_name("web_search"), "web_search")
+
+    def test_slash_replaced(self):
+        self.assertEqual(sanitize_tool_name("user/weather"), "user_weather")
+
+    def test_colon_replaced(self):
+        self.assertEqual(sanitize_tool_name("fs:read"), "fs_read")
+
+    def test_space_replaced(self):
+        self.assertEqual(sanitize_tool_name("my tool"), "my_tool")
+
+    def test_multiple_special_chars(self):
+        self.assertEqual(sanitize_tool_name("a/b:c d"), "a_b_c_d")
+
+    def test_leading_trailing_underscore(self):
+        self.assertEqual(sanitize_tool_name("_tool_"), "tool")
+
+    def test_all_special_chars_becomes_unknown(self):
+        self.assertEqual(sanitize_tool_name("///"), "unknown_tool")
+
+    def test_name_with_whitespace(self):
+        self.assertEqual(sanitize_tool_name("  read_file  "), "read_file")
+
+
+class TestCleanSchema(unittest.TestCase):
+    """clean_schema 测试"""
+
+    def test_removes_dollar_schema(self):
+        schema = {"$schema": "http://json-schema.org/draft-07/schema#", "type": "object"}
+        result = clean_schema(schema)
+        self.assertNotIn("$schema", result)
+        self.assertEqual(result["type"], "object")
+
+    def test_removes_additional_properties_false(self):
+        schema = {"type": "object", "properties": {"x": {"type": "string"}}, "additionalProperties": False}
+        result = clean_schema(schema)
+        self.assertNotIn("additionalProperties", result)
+
+    def test_keeps_additional_properties_true(self):
+        schema = {"type": "object", "additionalProperties": True}
+        result = clean_schema(schema)
+        self.assertEqual(result["additionalProperties"], True)
+
+    def test_recursive_nested(self):
+        schema = {
+            "type": "object",
+            "properties": {
+                "nested": {
+                    "$schema": "http://...",
+                    "type": "object",
+                    "additionalProperties": False
+                }
+            }
+        }
+        result = clean_schema(schema)
+        self.assertNotIn("$schema", result["properties"]["nested"])
+        self.assertNotIn("additionalProperties", result["properties"]["nested"])
+
+    def test_list_items(self):
+        schema = {"type": "array", "items": {"$schema": "x", "type": "string"}}
+        result = clean_schema(schema)
+        self.assertNotIn("$schema", result["items"])
+
+    def test_plain_value(self):
+        self.assertEqual(clean_schema("hello"), "hello")
+        self.assertEqual(clean_schema(42), 42)
+        self.assertEqual(clean_schema(None), None)
+
+
+class TestConvertTools(unittest.TestCase):
+    """convert_tools 集成测试"""
+
+    def test_basic_tool(self):
+        tools = [{
+            "name": "web_search",
+            "description": "Search the web"
+        }]
+        result = convert_tools(tools)
+        self.assertEqual(len(result), 1)
+        self.assertEqual(result[0]["function"]["name"], "web_search")
+
+    def test_tool_name_sanitized(self):
+        tools = [{
+            "function": {
+                "name": "user/read_file",
+                "parameters": {"type": "object", "properties": {}}
+            }
+        }]
+        result = convert_tools(tools)
+        self.assertEqual(result[0]["function"]["name"], "user_read_file")
+
+    def test_schema_cleaned(self):
+        tools = [{
+            "name": "test",
+            "input_schema": {
+                "$schema": "http://...",
+                "type": "object",
+                "properties": {
+                    "x": {"type": "string"}
+                },
+                "additionalProperties": False
+            }
+        }]
+        result = convert_tools(tools)
+        params = result[0]["function"]["parameters"]
+        self.assertNotIn("$schema", params)
+        self.assertNotIn("additionalProperties", params)
+        self.assertEqual(params["type"], "object")
+
+    def test_empty_tools(self):
+        self.assertEqual(convert_tools([]), [])
+
+    def test_empty_name_skipped(self):
+        tools = [{"name": "", "description": "empty"}]
+        result = convert_tools(tools)
+        self.assertEqual(len(result), 0)
 
 
 if __name__ == "__main__":
