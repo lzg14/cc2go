@@ -422,3 +422,85 @@ from router import ...
 - 新增 ≥15 个测试用例
 - `python -m unittest discover -s src -p "*_test.py"` 全部通过
 - `ruff check src/` 无新警告
+
+---
+
+## 端到端冒烟测试规范
+
+> 代码变更后，除单元测试外，应启动服务并执行以下冒烟测试验证全链路。
+
+### 启动
+
+```powershell
+# 确保无旧进程占端口
+Get-Process -Name python | ForEach-Object { Stop-Process -Id $_.Id -Force -ErrorAction SilentlyContinue }
+Start-Sleep -Seconds 1
+# 启动（后台）
+Start-Process -WindowStyle Hidden -FilePath python -ArgumentList "src\tray.py"
+Start-Sleep -Seconds 4
+# 确认端口监听
+netstat -ano | Select-String ":4001"
+```
+
+### 冒烟测试清单
+
+| # | 测试项 | 命令 | 验收标准 |
+|---|--------|------|---------|
+| 1 | 健康检查 | `curl.exe -s http://127.0.0.1:4001/health` | 返回 JSON，含 `"status":"ok"` 和模型列表 |
+| 2 | 模型列表 | `curl.exe -s -H "Authorization: Bearer sk-your-master-key" http://127.0.0.1:4001/v1/models` | 返回模型数组 |
+| 3 | 管理页 | `curl.exe -s -o NUL -w "%{http_code}" http://127.0.0.1:4001/` | HTTP 200 |
+| 4 | Anthropic 非流式 | `python -c "参见下方脚本"` | 返回含 `content` 的 JSON |
+| 5 | Anthropic 流式 | `python -c "参见下方脚本"` 带上 `\"stream\":True` | 返回 SSE 事件序列，HTTP 200 |
+| 6 | OpenAI 非流式 | `python -c "调用 /v1/chat/completions"` | 返回含 `choices[0].message.content` 的 JSON |
+| 7 | OpenAI 流式 | `python -c "调用 /v1/chat/completions 带上 stream:True"` | ⚠️ 已知不支持（返回 500），流式通过 Anthropic 路径 |
+
+### 测试脚本（Python 复用）
+
+```python
+import urllib.request, json
+
+BASE = "http://127.0.0.1:4001"
+AUTH = "Bearer sk-your-master-key"
+HEADERS = {"Authorization": AUTH, "Content-Type": "application/json"}
+
+def test(method, path, body=None):
+    data = json.dumps(body).encode() if body else None
+    req = urllib.request.Request(f"{BASE}{path}", data=data, headers=HEADERS, method=method)
+    resp = urllib.request.urlopen(req, timeout=15)
+    print(f"[OK] {method} {path} -> {resp.status}")
+    return resp
+
+# Anthropic 非流式
+test("POST", "/v1/messages", {
+    "model": "deepseek-v4-flash",
+    "messages": [{"role": "user", "content": "计算 10+20 = ? 只回复数字"}],
+    "max_tokens": 50
+})
+
+# Anthropic 流式
+test("POST", "/v1/messages", {
+    "model": "deepseek-v4-flash",
+    "messages": [{"role": "user", "content": "计算 1+1 = ?"}],
+    "max_tokens": 50,
+    "stream": True
+})
+
+# OpenAI 非流式
+test("POST", "/v1/chat/completions", {
+    "model": "deepseek-v4-flash",
+    "messages": [{"role": "user", "content": "计算 10+20 = ? 只回复数字"}],
+    "max_tokens": 50
+})
+```
+
+### 清理
+
+```powershell
+Get-Process -Name python | ForEach-Object { Stop-Process -Id $_.Id -Force -ErrorAction SilentlyContinue }
+```
+
+### 版本记录
+
+| 日期 | 版本 | 冒烟测试执行人 | 结果 |
+|------|------|---------------|------|
+| 2026-05-23 | v0.7.7 | AI 审查 | ✅ 全部通过（OpenAI 流式已知不支持） |

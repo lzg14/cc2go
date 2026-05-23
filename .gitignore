@@ -41,3 +41,6 @@ build/
 *.spec
 release/
 cc2go-*.zip
+
+# Superpowers AI 辅助工具生成文件
+.superpowers/
