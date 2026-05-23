@@ -62,7 +62,7 @@ def verify_master_key(request: Request) -> None:
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-def get_static_dir():
+def get_static_dir() -> str:
     """静态资源目录，对于 PyInstaller 优先使用打包内的资源"""
     if getattr(sys, 'frozen', False):
         return os.path.dirname(sys.executable)
@@ -71,7 +71,7 @@ def get_static_dir():
 # 在模块顶层实例化一次，供全局使用（避免重复计算路径）
 _static_dir = get_static_dir()
 
-def get_static_path(filename):
+def get_static_path(filename: str) -> str:
     return os.path.join(_static_dir, filename)
 
 
@@ -144,7 +144,7 @@ _custom_models_lock = threading.Lock()
 _custom_models_cache_valid = False
 _custom_models_cache = []
 
-def load_custom_models():
+def load_custom_models() -> List[Dict]:
     global _custom_models_cache, _custom_models_cache_valid
     if _custom_models_cache_valid:
         return _custom_models_cache
@@ -167,7 +167,7 @@ def save_custom_models(models) -> None:
         _custom_models_cache = models
         _custom_models_cache_valid = True
 
-def merge_models(upstream, custom):
+def merge_models(upstream: dict, custom: list) -> dict:
     """合并上游模型和自定义模型，自定义模型优先"""
     merged = dict(upstream)
     for m in custom:
@@ -267,7 +267,7 @@ def resolve_model_name(model_name: str, available_models: dict) -> str | None:
     return None
 
 
-def setup_logger():
+def setup_logger() -> logging.Logger:
     from logging.handlers import RotatingFileHandler
     logger = logging.getLogger("llm_router")
     if logger.handlers:
@@ -315,7 +315,7 @@ STATS_FILE = os.path.join(get_base_dir(), "data", "stats.json")
 _stats_dirty = 0
 _stats_lock = threading.Lock()
 
-def load_stats():
+def load_stats() -> Dict[str, int]:
     try:
         with open(STATS_FILE, "r") as f:
             return json.load(f)
