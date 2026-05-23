@@ -15,9 +15,14 @@ import uvicorn
 import pystray
 from PIL import Image, ImageDraw, ImageFont
 
+# 保证 src/ 作为包加载，使 router.py 的相对导入生效
+_src_dir = os.path.dirname(os.path.abspath(__file__))
+_proj_root = os.path.dirname(_src_dir)
+if _proj_root not in sys.path:
+    sys.path.insert(0, _proj_root)
 
-from router import app, config, logger, VERSION  # noqa: E402
-from utils import get_base_dir
+from src.router import app, config, logger, VERSION  # noqa: E402
+from src.utils import get_base_dir
 
 # get_static_dir 已在 router.py 定义，此处直接使用
 def get_static_dir():
