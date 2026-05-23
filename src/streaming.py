@@ -8,7 +8,7 @@ import logging
 import uuid
 from typing import AsyncGenerator, Dict
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("llm_router")
 
 
 def build_message_start_event(msg_id: str, model: str) -> Dict:
@@ -90,6 +90,7 @@ async def convert_openai_stream_to_anthropic(
     # 按 block_index 累积 tool_call arguments（OpenAI 流式每个 chunk 发增量片断，
     # Anthropic input_json_delta 期望完整 partial_json）
     _args_accumulator: Dict[int, str] = {}
+    _args_sent: Dict[int, int] = {}
 
     try:
         async for line in response.aiter_lines():
@@ -159,8 +160,11 @@ async def convert_openai_stream_to_anthropic(
                 if tc_input:
                     prev = _args_accumulator.get(block_index, "")
                     _args_accumulator[block_index] = prev + tc_input
+                    sent_len = _args_sent.get(block_index, 0)
+                    delta = _args_accumulator[block_index][sent_len:]
+                    _args_sent[block_index] = len(_args_accumulator[block_index])
                     yield format_sse_event(
-                        build_content_block_delta(block_index, "input_json_delta", _args_accumulator[block_index]),
+                        build_content_block_delta(block_index, "input_json_delta", delta),
                         "content_block_delta"
                     )
 

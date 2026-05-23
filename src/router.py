@@ -70,6 +70,18 @@ def get_base_dir():
         return os.path.dirname(sys.executable)
     return os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
+def get_static_dir():
+    """静态资源目录，对于 PyInstaller 优先使用打包内的资源"""
+    if getattr(sys, 'frozen', False):
+        return os.path.dirname(sys.executable)
+    return os.path.join(get_base_dir(), "static")
+
+# 在模块顶层实例化一次，供全局使用（避免重复计算路径）
+_static_dir = get_static_dir()
+
+def get_static_path(filename):
+    return os.path.join(_static_dir, filename)
+
 
 # 确保运行时目录存在
 for _rd in ("data", "logs"):
@@ -684,7 +696,6 @@ async def call_opencode(endpoint: str, payload: dict, base_url: str = None, api_
     headers = {
         "Authorization": f"Bearer {key}",
         "Content-Type": "application/json",
-        "x-api-key": key
     }
     fallback_idx = 0  # <-- 初始化在循环外
     client = get_http_client()

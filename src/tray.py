@@ -22,6 +22,10 @@ def get_base_dir():
         return os.path.dirname(sys.executable)
     return os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
+
+from router import app, config, logger, VERSION, get_base_dir  # noqa: E402
+
+# get_static_dir 已在 router.py 定义，此处直接使用
 def get_static_dir():
     """静态资源目录，对于 PyInstaller 优先使用打包内的资源"""
     if getattr(sys, 'frozen', False):
@@ -29,8 +33,6 @@ def get_static_dir():
         if os.path.exists(meipass):
             return meipass
     return os.path.join(get_base_dir(), "static")
-
-from router import app, config, logger, VERSION  # noqa: E402
 
 PID_FILE = os.path.join(get_base_dir(), "data", "cc2go.pid")
 
@@ -90,6 +92,7 @@ def kill_old_process():
                 if pid != os.getpid():
                     _try_kill_pid(pid)
     except Exception:
+        logger.warning(f"端口扫描失败: {e}")
         pass
 
     # 等待端口释放
@@ -122,8 +125,8 @@ def _try_kill_pid(pid):
             import subprocess
             subprocess.run(["taskkill", "/f", "/pid", str(pid)],
                           capture_output=True, timeout=5)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning(f"taskkill 失败 PID={pid}: {e}")
 
 
 def load_icon():
