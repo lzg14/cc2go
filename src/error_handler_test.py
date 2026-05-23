@@ -1,16 +1,13 @@
 """
 错误自适应处理器 - 单元测试 & 集成测试
 """
-import sys
-import os
-sys.path.insert(0, os.path.dirname(__file__))
-
 import unittest
-from error_handler import (
+from src.error_handler import (
     ErrorType, RetryStrategy, get_backoff_delay,
     parse_upstream_error, classify_and_suggest_action,
     ErrorArchiveRateLimiter, classify_error
 )
+from src.router import convert_tools
 
 
 class TestErrorType(unittest.TestCase):
@@ -154,7 +151,7 @@ class TestCallOpencodeRetryLogic(unittest.TestCase):
         场景：上游返回 429，重试后返回 200
         期望：RETRY_WITH_BACKOFF -> 退避 -> 重试 -> 成功
         """
-        from error_handler import RetryStrategy, classify_and_suggest_action
+        from src.error_handler import RetryStrategy, classify_and_suggest_action
 
         # attempt 0: 429 -> RETRY_WITH_BACKOFF
         strategy0, _, _ = classify_and_suggest_action(429, {}, 0, 3)
@@ -174,7 +171,7 @@ class TestCallOpencodeRetryLogic(unittest.TestCase):
         场景：上游连续返回 500，第三次尝试时建议切换模型
         期望：attempt 2 -> SWITCH_MODEL hint="try_next_available"
         """
-        from error_handler import classify_and_suggest_action, RetryStrategy
+        from src.error_handler import classify_and_suggest_action, RetryStrategy
 
         strategy, _, hint = classify_and_suggest_action(500, {}, 2, 3)
         self.assertEqual(strategy, RetryStrategy.SWITCH_MODEL)
@@ -184,7 +181,7 @@ class TestCallOpencodeRetryLogic(unittest.TestCase):
         """
         场景：400 Bad Request，任何 attempt 都直接失败，不重试不切换模型
         """
-        from error_handler import classify_and_suggest_action, RetryStrategy
+        from src.error_handler import classify_and_suggest_action, RetryStrategy
 
         for attempt in range(3):
             strategy, log_msg, hint = classify_and_suggest_action(400, {}, attempt, 3)
@@ -196,7 +193,7 @@ class TestCallOpencodeRetryLogic(unittest.TestCase):
         """
         场景：401 Unauthorized，直接失败，不泄露上游返回的错误详情
         """
-        from error_handler import classify_and_suggest_action, RetryStrategy
+        from src.error_handler import classify_and_suggest_action, RetryStrategy
 
         strategy, log_msg, hint = classify_and_suggest_action(401, {"message": "invalid api key the real secret"}, 0, 3)
         self.assertEqual(strategy, RetryStrategy.FAIL_FAST)
@@ -214,7 +211,7 @@ class TestArchiveRateLimiterIntegration(unittest.TestCase):
         场景：多线程同时调用 archive()
         期望：线程安全，仅 1 个成功其余失败（window 未过期）
         """
-        from error_handler import ErrorArchiveRateLimiter
+        from src.error_handler import ErrorArchiveRateLimiter
 
         limiter = ErrorArchiveRateLimiter(window_seconds=300.0)
         results = []
@@ -242,7 +239,7 @@ class TestArchiveRateLimiterIntegration(unittest.TestCase):
         场景：窗口到期后，限额恢复
         期望：等待窗口过期后可再次归档
         """
-        from error_handler import ErrorArchiveRateLimiter
+        from src.error_handler import ErrorArchiveRateLimiter
 
         limiter = ErrorArchiveRateLimiter(window_seconds=0.1)
         self.assertTrue(limiter.archive())
@@ -270,7 +267,7 @@ class TestBackoffDelayValues(unittest.TestCase):
 
     def test_backoff_server_error_base_is_2x(self):
         """服务器错误使用 base=2.0 的退避"""
-        from error_handler import classify_and_suggest_action
+        from src.error_handler import classify_and_suggest_action
 
         strategy, log_msg, _ = classify_and_suggest_action(500, {}, 0, 3)
         self.assertIn("退避", log_msg)
@@ -289,7 +286,7 @@ class TestActualArchiveScenarios(unittest.TestCase):
         场景：DeepSeek API 不认识 thinking 字段，报 "unknown variant thinking"
         期望：400 -> FAIL_FAST（不重试不切换模型）
         """
-        from error_handler import classify_and_suggest_action, RetryStrategy, classify_error
+        from src.error_handler import classify_and_suggest_action, RetryStrategy, classify_error
 
         # DeepSeek 的 thinking 错误返回 400
         self.assertEqual(classify_error(400), ErrorType.CLIENT_ERROR)
@@ -302,7 +299,7 @@ class TestActualArchiveScenarios(unittest.TestCase):
         场景：MiniMax 不支持 output_config with json_schema，报 "invalid params"
         期望：400 -> FAIL_FAST
         """
-        from error_handler import classify_and_suggest_action, RetryStrategy
+        from src.error_handler import classify_and_suggest_action, RetryStrategy
 
         strategy, _, _ = classify_and_suggest_action(400, {}, 0, 3)
         self.assertEqual(strategy, RetryStrategy.FAIL_FAST)
@@ -313,7 +310,7 @@ class TestActualArchiveScenarios(unittest.TestCase):
         这是 Claude Code 内部逻辑问题，路由器只能 fail_fast
         期望：400 -> FAIL_FAST
         """
-        from error_handler import classify_and_suggest_action, RetryStrategy
+        from src.error_handler import classify_and_suggest_action, RetryStrategy
 
         strategy, _, _ = classify_and_suggest_action(400, {}, 0, 3)
         self.assertEqual(strategy, RetryStrategy.FAIL_FAST)
@@ -323,10 +320,6 @@ class TestActualArchiveScenarios(unittest.TestCase):
         场景：Claude 发来的工具格式缺少 type 字段 (keys: name/description/input_schema)
         期望：convert_tools 正确添加 type: "function"
         """
-        import sys
-        import os
-        sys.path.insert(0, os.path.dirname(__file__))
-        from router import convert_tools
 
         # CC 发来的原始格式（无 type 字段）
         raw_tools = [
@@ -360,7 +353,7 @@ class TestActualArchiveScenarios(unittest.TestCase):
         # 当前 router.py 在 /v1/chat/completions 路径没有移除 thinking
         # 这是一个已知行为：router 直接透传 thinking 给 DeepSeek，DeepSeek 返回 400
         # 此测试验证 400 错误正确触发 FAIL_FAST
-        from error_handler import classify_and_suggest_action, RetryStrategy
+        from src.error_handler import classify_and_suggest_action, RetryStrategy
 
         strategy, log_msg, hint = classify_and_suggest_action(400, {}, 0, 3)
         self.assertEqual(strategy, RetryStrategy.FAIL_FAST)
@@ -388,7 +381,7 @@ class TestRouterIntegration(unittest.TestCase):
         场景：429 重试 3 次全部失败
         期望：attempt 0/1 -> RETRY_WITH_BACKOFF, attempt 2 -> SWITCH_MODEL
         """
-        from error_handler import classify_and_suggest_action, RetryStrategy
+        from src.error_handler import classify_and_suggest_action, RetryStrategy
 
         # attempt 0
         s0, _, _ = classify_and_suggest_action(429, {}, 0, 3)
@@ -408,7 +401,7 @@ class TestRouterIntegration(unittest.TestCase):
         场景：上游持续返回 500，第三层重试后切换模型
         期望：attempt 2 -> SWITCH_MODEL
         """
-        from error_handler import classify_and_suggest_action, RetryStrategy
+        from src.error_handler import classify_and_suggest_action, RetryStrategy
 
         strategy, _, hint = classify_and_suggest_action(500, {}, 2, 3)
         self.assertEqual(strategy, RetryStrategy.SWITCH_MODEL)

@@ -2,12 +2,8 @@
 MCP 工具短路模块 - 单元测试
 使用 unittest 编写（无 pytest 依赖）
 """
-import sys
-import os
-sys.path.insert(0, os.path.dirname(__file__))
-
 import unittest
-from mcp_bypass import should_bypass, extract_query, BYPASS_TOOLS
+from src.mcp_bypass import should_bypass, extract_query, BYPASS_TOOLS
 
 
 class TestShouldBypass(unittest.TestCase):

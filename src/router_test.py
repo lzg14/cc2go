@@ -1,12 +1,8 @@
 """
 路由器核心格式转换 - 单元测试
 """
-import sys
-import os
-sys.path.insert(0, os.path.dirname(__file__))
-
 import unittest
-from router import convert_anthropic_messages_to_openai, convert_tools, sanitize_tool_name, clean_schema
+from src.router import convert_anthropic_messages_to_openai, convert_tools, sanitize_tool_name, clean_schema
 
 
 class TestConvertMessages(unittest.TestCase):

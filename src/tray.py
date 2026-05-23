@@ -16,14 +16,8 @@ import pystray
 from PIL import Image, ImageDraw, ImageFont
 
 
-def get_base_dir():
-    """项目根目录（用户数据目录），兼容 PyInstaller onefile 打包"""
-    if getattr(sys, 'frozen', False):
-        return os.path.dirname(sys.executable)
-    return os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-
-
-from router import app, config, logger, VERSION, get_base_dir  # noqa: E402
+from router import app, config, logger, VERSION  # noqa: E402
+from utils import get_base_dir
 
 # get_static_dir 已在 router.py 定义，此处直接使用
 def get_static_dir():
@@ -91,7 +85,7 @@ def kill_old_process():
                 pid = int(parts[-1])
                 if pid != os.getpid():
                     _try_kill_pid(pid)
-    except Exception:
+    except Exception as e:
         logger.warning(f"端口扫描失败: {e}")
         pass
 

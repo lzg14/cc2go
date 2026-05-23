@@ -22,19 +22,18 @@ from fastapi import FastAPI, Request, HTTPException, Body
 from fastapi.responses import StreamingResponse, JSONResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
 from dotenv import load_dotenv
-from streaming import convert_openai_stream_to_anthropic
-from mcp_bypass import should_bypass, handle_bypass, extract_query
-from error_handler import (
+from .streaming import convert_openai_stream_to_anthropic
+from .mcp_bypass import should_bypass, handle_bypass, extract_query
+from .error_handler import (
     classify_and_suggest_action,
     get_backoff_delay,
     parse_upstream_error,
     RetryStrategy,
     _archive_limiter as error_archive_limiter,
 )
-
+from utils import get_base_dir
 
 def verify_master_key(request: Request) -> None:
-    """Verify that the request has a valid Authorization header matching the configured master key"""
     authorization = request.headers.get("Authorization")
     if not authorization:
         raise HTTPException(
@@ -62,13 +61,6 @@ def verify_master_key(request: Request) -> None:
             detail="Invalid API key",
             headers={"WWW-Authenticate": "Bearer"},
         )
-
-
-def get_base_dir():
-    """项目根目录，兼容 PyInstaller onefile 打包"""
-    if getattr(sys, 'frozen', False):
-        return os.path.dirname(sys.executable)
-    return os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 def get_static_dir():
     """静态资源目录，对于 PyInstaller 优先使用打包内的资源"""

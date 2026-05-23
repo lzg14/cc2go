@@ -2,12 +2,8 @@
 SSE 流式响应转换器 - 单元测试
 使用 unittest 编写（无 pytest 依赖）
 """
-import sys
-import os
-sys.path.insert(0, os.path.dirname(__file__))
-
 import unittest
-from streaming import (
+from src.streaming import (
     build_message_start_event,
     build_content_block_start,
     build_content_block_delta,
