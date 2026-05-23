@@ -28,53 +28,85 @@ BYPASS_TOOLS = {
 
 def should_bypass(body: Dict) -> Tuple[bool, Optional[str]]:
     """
-    判断请求是否应短路
-    仅当消息中模型已实际调用了 bypass 工具（tool_use）才触发，
-    不因 tools 参数中有该工具定义就短路。
-    Returns: (should_bypass, tool_name)
+    判断请求是否应短路（请求层检查）
+    仅检查最后一条消息是否为 assistant 且包含 tool_use。
+    若最后一条消息是 tool_result，说明工具已被执行，不应绕过。
     """
     messages = body.get("messages", [])
     if not messages:
         logger.debug("[Bypass] no messages, skip")
         return False, None
 
-    # 详细调试日志：打印每条消息的结构
-    for i, msg in enumerate(messages):
-        role = msg.get("role", "?")
-        content = msg.get("content", [])
-        content_types = []
-        if isinstance(content, list):
-            content_types = [b.get("type", "?") if isinstance(b, dict) else str(type(b)) for b in content]
-        elif isinstance(content, str):
-            content_types = ["str"]
-        logger.debug(f"[Bypass] msg[{i}] role={role}, content_types={content_types}")
+    last_msg = messages[-1]
+    role = last_msg.get("role", "")
+    content = last_msg.get("content", [])
 
-        if not isinstance(content, list):
+    # 只有最后一条消息是 assistant 角色时才可能触发 bypass
+    if role != "assistant":
+        logger.debug(f"[Bypass] last msg role={role}, not assistant, skip")
+        return False, None
+
+    if not isinstance(content, list):
+        return False, None
+
+    for block in content:
+        if not isinstance(block, dict):
             continue
-        for j, block in enumerate(content):
-            if not isinstance(block, dict):
+        block_type = block.get("type", "")
+        block_name = block.get("name", "")
+        if block_type in ("tool_use", "tool_use_block"):
+            if not block_name:
                 continue
-            block_type = block.get("type", "?")
-            block_name = block.get("name", "")
-            logger.debug(f"[Bypass]   msg[{i}] block[{j}] type={block_type}, name={repr(block_name)}")
-            if block_type in ("tool_use", "tool_use_block"):
-                if not block_name:
-                    logger.debug(f"[Bypass]   → tool_use block[{j}] has no name, skip")
-                    continue
-                # MCP 格式: mcp__Provider__tool_name → 归一化到 base
-                if block_name.startswith("mcp__"):
-                    base = block_name.split("__", 2)[-1]
-                    logger.debug(f"[Bypass]   → MCP format, base={base}, BYPASS_TOOLS={list(BYPASS_TOOLS.keys())}")
-                    if base in BYPASS_TOOLS:
-                        logger.info(f"[Bypass] HIT! name={block_name} → base={base}")
-                        return True, base
-                if block_name in BYPASS_TOOLS:
-                    logger.info(f"[Bypass] HIT! name={block_name}")
-                    return True, block_name
-                else:
-                    logger.debug(f"[Bypass]   → tool_use[{j}] name={block_name!r} NOT in BYPASS_TOOLS")
-    logger.debug(f"[Bypass] no tool_use found, BYPASS_TOOLS={list(BYPASS_TOOLS.keys())}")
+            # MCP 格式: mcp__Provider__tool_name → 归一化到 base
+            if block_name.startswith("mcp__"):
+                base = block_name.split("__", 2)[-1]
+                if base in BYPASS_TOOLS:
+                    logger.info(f"[Bypass] HIT! name={block_name} → base={base}")
+                    return True, base
+            if block_name in BYPASS_TOOLS:
+                logger.info(f"[Bypass] HIT! name={block_name}")
+                return True, block_name
+
+    logger.debug("[Bypass] last msg has no matching tool_use")
     return False, None
+
+
+def find_bypass_tool_uses(anthropic_response: Dict) -> List[Dict]:
+    """查找 Anthropic 响应中包含 bypass 工具的 tool_use 块"""
+    found = []
+    content = anthropic_response.get("content", [])
+    if not isinstance(content, list):
+        return []
+    for item in content:
+        if isinstance(item, dict) and item.get("type") == "tool_use" and item.get("name") in BYPASS_TOOLS:
+            found.append(item)
+    return found
+
+
+async def apply_response_bypass(anthropic_response: Dict) -> Dict:
+    """
+    响应层 bypass：将 Anthropic 响应中的 bypass tool_use 替换为搜索结果文本。
+    若没有 bypass 项，返回原响应不变。
+    """
+    bypass_items = find_bypass_tool_uses(anthropic_response)
+    if not bypass_items:
+        return anthropic_response
+
+    new_content = []
+    for item in anthropic_response.get("content", []):
+        if item in bypass_items:
+            query = item.get("input", {}).get("query", "")
+            logger.info(f"[Bypass/Response] intercepting tool_use: {item['name']}, query={query!r}")
+            bypass_result = await handle_bypass(item["name"], query)
+            new_content.extend(bypass_result.get("content", []))
+        else:
+            new_content.append(item)
+
+    result = dict(anthropic_response)
+    result["content"] = new_content
+    result["stop_reason"] = "end_turn"
+    logger.info("[Bypass/Response] tool_use handled locally, returning text")
+    return result
 
 
 def extract_query(messages: List[Dict]) -> str:

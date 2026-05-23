@@ -4,14 +4,20 @@ cc2go Release 打包脚本
 """
 
 import os
+import re
 import sys
 import shutil
 import zipfile
 import subprocess
 from pathlib import Path
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "src"))
-from router import VERSION
+_PROJECT_DIR = Path(__file__).parent
+_TOML_PATH = _PROJECT_DIR / "pyproject.toml"
+_match = re.search(r'version = "(.+?)"', _TOML_PATH.read_text(encoding="utf-8"))
+if not _match:
+    print("错误: 无法从 pyproject.toml 解析版本号")
+    sys.exit(1)
+VERSION = _match.group(1)
 
 PROJECT_DIR = Path(__file__).parent
 DIST_DIR = PROJECT_DIR / "dist"

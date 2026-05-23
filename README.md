@@ -1,4 +1,4 @@
-# cc2go <small>v0.7.7</small>
+# cc2go <small>v0.8.0</small>
 
 <p align="center">
   <b>Claude Code → OpenCode Go Adapter</b>
@@ -37,6 +37,8 @@
 - 🔑 **Security** — Defaults to 127.0.0.1 (local-only), Bearer Token authentication on proxy endpoints
 - 🔧 **Tool name sanitization** — Replaces special characters in tool names to prevent 400 errors
 - 🧹 **Schema cleaning** — Recursively removes incompatible JSON Schema fields for broader model compatibility
+- 🔄 **Model switching compatibility** — Auto-completes missing tool results when switching between strict (DeepSeek) and lenient (MiniMax) models
+- ⚡ **Web search bypass** — Intercepts `web_search` tool calls at the response level, runs `mmx` search locally, returns results immediately without extra round-trips
 
 ---
 

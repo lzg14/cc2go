@@ -22,7 +22,7 @@ if _proj_root not in sys.path:
     sys.path.insert(0, _proj_root)
 
 from src.router import app, config, logger, VERSION  # noqa: E402
-from src.utils import get_base_dir
+from src.utils import get_base_dir  # noqa: E402
 
 # get_static_dir 已在 router.py 定义，此处直接使用
 def get_static_dir():

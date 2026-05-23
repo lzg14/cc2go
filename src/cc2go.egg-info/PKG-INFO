@@ -1,6 +1,6 @@
 Metadata-Version: 2.4
 Name: cc2go
-Version: 0.7.5
+Version: 0.7.7
 Summary: Claude Code to OpenCode Go adapter — route Anthropic format to OpenAI models
 Author: lzg14
 License: MIT
@@ -30,7 +30,7 @@ Requires-Dist: pystray>=0.19.0
 Requires-Dist: Pillow>=10.0.0
 Dynamic: license-file
 
-# cc2go <small>v0.7.5</small>
+# cc2go <small>v0.7.7</small>
 
 <p align="center">
   <b>Claude Code → OpenCode Go Adapter</b>

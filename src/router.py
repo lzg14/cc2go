@@ -23,7 +23,12 @@ from fastapi.responses import StreamingResponse, JSONResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
 from dotenv import load_dotenv
 from .streaming import convert_openai_stream_to_anthropic
-from .mcp_bypass import should_bypass, handle_bypass, extract_query
+from .mcp_bypass import (
+    should_bypass,
+    handle_bypass,
+    extract_query,
+    apply_response_bypass,
+)
 from .error_handler import (
     classify_and_suggest_action,
     get_backoff_delay,
@@ -120,7 +125,7 @@ def update_archive_limiter(interval_seconds: int) -> None:
     error_archive_limiter.update(max(interval_seconds, 1))
 
 
-VERSION = "0.7.7"
+VERSION = "0.8.0"
 
 # ============ 配置 ============
 DEFAULT_MODELS = {
@@ -539,7 +544,51 @@ def convert_anthropic_messages_to_openai(messages: List[Dict]) -> List[Dict]:
                     c = strip_reasoning(c)
             openai_messages.append({"role": role, "content": c})
 
+    # 补齐缺失的 tool 响应消息，兼容 DeepSeek 等严格模型
+    openai_messages = _pad_missing_tool_results(openai_messages)
     return openai_messages
+
+
+def _pad_missing_tool_results(messages: List[Dict]) -> List[Dict]:
+    """
+    补齐缺失的 tool 响应消息。
+    对于每个 assistant 消息中的 tool_calls，以批次方式处理：先收集紧随其后的所有 tool 消息，
+    再插入缺失的空 tool 消息，确保结果顺序正确。
+    """
+    result: List[Dict] = []
+    i = 0
+    while i < len(messages):
+        msg = messages[i]
+        result.append(msg)
+
+        if msg.get("role") == "assistant" and msg.get("tool_calls"):
+            tc_ids = {tc["id"] for tc in msg["tool_calls"] if tc.get("id")}
+            handled: set[str] = set()
+
+            # 批次处理紧随其后的连续 tool 消息
+            i += 1
+            while i < len(messages) and messages[i].get("role") == "tool":
+                tc_id = messages[i].get("tool_call_id")
+                if tc_id in tc_ids:
+                    handled.add(tc_id)
+                result.append(messages[i])
+                i += 1
+
+            # 为缺失的 id 插入空 tool 消息
+            missing = tc_ids - handled
+            for tc_id in sorted(missing):
+                result.append({
+                    "role": "tool",
+                    "tool_call_id": tc_id,
+                    "content": "",
+                })
+                logger.debug("[ToolCompat] Inserted empty tool result for %s", tc_id)
+
+            continue  # i 已在内部循环推进
+
+        i += 1
+
+    return result
 
 
 def sanitize_tool_name(name: str) -> str:
@@ -723,6 +772,12 @@ async def call_opencode(endpoint: str, payload: dict, base_url: str = None, api_
                 )
                 logger.warning(log_msg)
 
+                # 检测模型切换后上下文不兼容：旧模型的 tool_call 序列不被新模型接受
+                err_text = parse_upstream_error(raw_body)
+                if "tool_calls" in err_text and "must be followed by tool messages" in err_text:
+                    logger.warning(f"[ModelSwitch] 切换到新模型后上下文不兼容，需清空对话重新开始: {err_text}")
+                    err_text = "模型切换后旧上下文不兼容，请清空当前对话重新开始。切换模型前建议开启新对话。"
+
                 # 限速归档
                 if response.status_code >= 400:
                     maybe_archive(
@@ -734,7 +789,7 @@ async def call_opencode(endpoint: str, payload: dict, base_url: str = None, api_
                     )
 
                 if strategy == RetryStrategy.FAIL_FAST:
-                    raise HTTPException(status_code=response.status_code, detail=parse_upstream_error(raw_body))
+                    raise HTTPException(status_code=response.status_code, detail=err_text)
 
                 if strategy == RetryStrategy.SWITCH_MODEL:
                     if fallback_idx < len(config.fallback_models):
@@ -744,7 +799,7 @@ async def call_opencode(endpoint: str, payload: dict, base_url: str = None, api_
                         payload = dict(payload, model=fallback_model)
                         continue
                     else:
-                        raise HTTPException(status_code=response.status_code, detail=parse_upstream_error(raw_body))
+                        raise HTTPException(status_code=response.status_code, detail=err_text)
 
                 if strategy == RetryStrategy.RETRY_WITH_BACKOFF:
                     delay = get_backoff_delay(attempt)
@@ -958,6 +1013,9 @@ async def anthropic_messages(request: Request):
 
         # 转换响应
         anthropic_response = convert_response_to_anthropic(result, model_name)
+
+        # 响应层 bypass: LLM 返回 tool_use 时，直接本地处理并返回文本
+        anthropic_response = await apply_response_bypass(anthropic_response)
 
         # 全量日志：转换后的 Anthropic 格式响应
         if config.detailed_logging:
