@@ -31,12 +31,12 @@ def get_static_dir():
 PID_FILE = os.path.join(get_base_dir(), "data", "cc2go.pid")
 
 
-def save_pid():
+def save_pid() -> None:
     with open(PID_FILE, "w") as f:
         f.write(str(os.getpid()))
 
 
-def remove_pid():
+def remove_pid() -> None:
     try:
         if os.path.exists(PID_FILE):
             os.remove(PID_FILE)
@@ -44,7 +44,7 @@ def remove_pid():
         pass
 
 
-def kill_old_process():
+def kill_old_process() -> None:
     """检查端口是否被占用，杀掉旧进程"""
     import socket
     port = config.router_port or 4001
@@ -106,7 +106,7 @@ def kill_old_process():
     logger.warning(f"端口 {port} 仍被占用，启动可能失败")
 
 
-def _try_kill_pid(pid):
+def _try_kill_pid(pid) -> None:
     """尝试杀掉指定 PID 的进程"""
     if pid == os.getpid():
         return
@@ -142,7 +142,7 @@ def load_icon():
     return img
 
 
-def open_admin():
+def open_admin() -> None:
     url = f"http://127.0.0.1:{config.router_port}"
     webbrowser.open(url, new=0)
 
@@ -156,13 +156,13 @@ def build_tray_menu():
     )
 
 
-def quit_app(icon, item):
+def quit_app(icon, item) -> None:
     icon.stop()
     remove_pid()
     sys.exit(0)
 
 
-def run_server():
+def run_server() -> None:
     host = config.router_host or "0.0.0.0"
     port = config.router_port or 4001
     logging.disable(logging.CRITICAL)
@@ -173,7 +173,7 @@ def run_server():
         sys.exit(1)
 
 
-def _auto_open_admin():
+def _auto_open_admin() -> None:
     """延迟 2 秒后自动打开管理页"""
     time.sleep(2)
     try:
@@ -183,7 +183,7 @@ def _auto_open_admin():
         pass
 
 
-def main():
+def main() -> None:
     os.chdir(get_base_dir())
     kill_old_process()
     save_pid()

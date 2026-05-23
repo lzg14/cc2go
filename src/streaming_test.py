@@ -15,21 +15,21 @@ from src.streaming import (
 
 
 class TestEventBuilders(unittest.TestCase):
-    def test_build_message_start_event(self):
+    def test_build_message_start_event(self) -> None:
         result = build_message_start_event("msg-123", "test-model")
         self.assertEqual(result["type"], "message_start")
         self.assertEqual(result["message"]["id"], "msg-123")
         self.assertEqual(result["message"]["role"], "assistant")
         self.assertEqual(result["message"]["model"], "test-model")
 
-    def test_build_content_block_start_text(self):
+    def test_build_content_block_start_text(self) -> None:
         result = build_content_block_start(0, "text")
         self.assertEqual(result["type"], "content_block_start")
         self.assertEqual(result["index"], 0)
         self.assertEqual(result["content_block"]["type"], "text")
         self.assertEqual(result["content_block"]["text"], "")
 
-    def test_build_content_block_start_tool_use(self):
+    def test_build_content_block_start_tool_use(self) -> None:
         result = build_content_block_start(0, "tool_use", id="tc_001", name="web_search")
         self.assertEqual(result["type"], "content_block_start")
         self.assertEqual(result["content_block"]["type"], "tool_use")
@@ -37,41 +37,41 @@ class TestEventBuilders(unittest.TestCase):
         self.assertEqual(result["content_block"]["name"], "web_search")
         self.assertEqual(result["content_block"]["input"], {})
 
-    def test_build_content_block_delta_text_delta(self):
+    def test_build_content_block_delta_text_delta(self) -> None:
         result = build_content_block_delta(0, "text_delta", "Hello")
         self.assertEqual(result["type"], "content_block_delta")
         self.assertEqual(result["index"], 0)
         self.assertEqual(result["delta"]["type"], "text_delta")
         self.assertEqual(result["delta"]["text"], "Hello")
 
-    def test_build_content_block_delta_input_json_delta(self):
+    def test_build_content_block_delta_input_json_delta(self) -> None:
         result = build_content_block_delta(0, "input_json_delta", '{"query":"weather"}')
         self.assertEqual(result["type"], "content_block_delta")
         self.assertEqual(result["delta"]["type"], "input_json_delta")
         self.assertEqual(result["delta"]["partial_json"], '{"query":"weather"}')
 
-    def test_build_message_delta_event(self):
+    def test_build_message_delta_event(self) -> None:
         result = build_message_delta_event("end_turn")
         self.assertEqual(result["type"], "message_delta")
         self.assertEqual(result["delta"]["stop_reason"], "end_turn")
         self.assertNotIn("index", result)
 
-    def test_build_message_delta_event_max_tokens(self):
+    def test_build_message_delta_event_max_tokens(self) -> None:
         result = build_message_delta_event("max_tokens")
         self.assertEqual(result["delta"]["stop_reason"], "max_tokens")
 
-    def test_build_message_stop_event(self):
+    def test_build_message_stop_event(self) -> None:
         result = build_message_stop_event()
         self.assertEqual(result["type"], "message_stop")
 
-    def test_build_content_block_stop(self):
+    def test_build_content_block_stop(self) -> None:
         result = build_content_block_stop(0)
         self.assertEqual(result["type"], "content_block_stop")
         self.assertEqual(result["index"], 0)
 
 
 class TestSSEFormatting(unittest.TestCase):
-    def test_format_sse_event(self):
+    def test_format_sse_event(self) -> None:
         event = {"type": "message_start", "message": {"id": "test"}}
         result = format_sse_event(event, "message_start")
         self.assertIsInstance(result, bytes)
@@ -79,7 +79,7 @@ class TestSSEFormatting(unittest.TestCase):
         self.assertTrue(b"data: " in result)
         self.assertTrue(result.endswith(b"\n\n"))
 
-    def test_format_sse_event_content_block_delta(self):
+    def test_format_sse_event_content_block_delta(self) -> None:
         event = {"type": "content_block_delta", "delta": {"text": "Hello"}}
         result = format_sse_event(event, "content_block_delta")
         self.assertIn(b"event: content_block_delta", result)
@@ -87,7 +87,7 @@ class TestSSEFormatting(unittest.TestCase):
 
 
 class TestEventSequence(unittest.TestCase):
-    def test_text_message_event_sequence(self):
+    def test_text_message_event_sequence(self) -> None:
         """验证文本消息的完整事件序列"""
         msg_id = "test-msg-123"
         model = "test-model"
@@ -111,7 +111,7 @@ class TestEventSequence(unittest.TestCase):
         self.assertIn(b"event: content_block_stop", events[3])
         self.assertIn(b"event: message_stop", events[-1])
 
-    def test_tool_use_event_sequence(self):
+    def test_tool_use_event_sequence(self) -> None:
         """验证 tool_use 消息的完整事件序列"""
         events = []
         events.append(format_sse_event(

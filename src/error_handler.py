@@ -127,12 +127,12 @@ def classify_and_suggest_action(
 class ErrorArchiveRateLimiter:
     """错误归档限速：window_seconds 内最多归档 1 次"""
 
-    def __init__(self, window_seconds: float = 30.0):
+    def __init__(self, window_seconds: float = 30.0) -> None:
         self.window = window_seconds
         self._last_archive: float = 0.0
         self._lock = threading.Lock()
 
-    def update(self, window_seconds: float):
+    def update(self, window_seconds: float) -> None:
         with self._lock:
             self.window = window_seconds
 

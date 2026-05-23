@@ -7,7 +7,7 @@ from src.mcp_bypass import should_bypass, extract_query, BYPASS_TOOLS
 
 
 class TestShouldBypass(unittest.TestCase):
-    def test_should_not_bypass_no_tool_use(self):
+    def test_should_not_bypass_no_tool_use(self) -> None:
         """仅 tools 参数中有 web_search 定义，没有实际 tool_use → 不短路"""
         body = {
             "model": "qwen3.6-plus",
@@ -17,14 +17,14 @@ class TestShouldBypass(unittest.TestCase):
         result = should_bypass(body)
         self.assertEqual(result, (False, None))
 
-    def test_should_not_bypass_no_messages(self):
+    def test_should_not_bypass_no_messages(self) -> None:
         body = {
             "tools": [{"name": "web_search"}]
         }
         result = should_bypass(body)
         self.assertEqual(result, (False, None))
 
-    def test_should_not_bypass_empty_messages(self):
+    def test_should_not_bypass_empty_messages(self) -> None:
         body = {
             "messages": [],
             "tools": [{"name": "web_search"}]
@@ -32,7 +32,7 @@ class TestShouldBypass(unittest.TestCase):
         result = should_bypass(body)
         self.assertEqual(result, (False, None))
 
-    def test_should_not_bypass_unknown_tool_use(self):
+    def test_should_not_bypass_unknown_tool_use(self) -> None:
         body = {
             "messages": [
                 {"role": "assistant", "content": [{"type": "tool_use", "name": "my_custom_tool", "input": {}}]}
@@ -41,7 +41,7 @@ class TestShouldBypass(unittest.TestCase):
         result = should_bypass(body)
         self.assertEqual(result, (False, None))
 
-    def test_should_bypass_tool_use_in_assistant(self):
+    def test_should_bypass_tool_use_in_assistant(self) -> None:
         """assistant 消息中有 tool_use: web_search → 短路"""
         body = {
             "messages": [
@@ -53,7 +53,7 @@ class TestShouldBypass(unittest.TestCase):
         result = should_bypass(body)
         self.assertEqual(result, (True, "web_search"))
 
-    def test_should_bypass_mcp_prefix_tool_use(self):
+    def test_should_bypass_mcp_prefix_tool_use(self) -> None:
         """mcp__MiniMax__web_search 格式的 tool_use → 短路"""
         body = {
             "messages": [
@@ -63,7 +63,7 @@ class TestShouldBypass(unittest.TestCase):
         result = should_bypass(body)
         self.assertEqual(result, (True, "web_search"))
 
-    def test_should_bypass_function_style(self):
+    def test_should_bypass_function_style(self) -> None:
         """旧版 function 格式（罕见，但兼容）"""
         body = {
             "messages": [
@@ -75,17 +75,17 @@ class TestShouldBypass(unittest.TestCase):
 
 
 class TestExtractQuery(unittest.TestCase):
-    def test_extract_from_string_content(self):
+    def test_extract_from_string_content(self) -> None:
         messages = [{"role": "user", "content": "今天天气怎么样"}]
         result = extract_query(messages)
         self.assertEqual(result, "今天天气怎么样")
 
-    def test_extract_from_text_block(self):
+    def test_extract_from_text_block(self) -> None:
         messages = [{"role": "user", "content": [{"type": "text", "text": "搜索 Python 教程"}]}]
         result = extract_query(messages)
         self.assertEqual(result, "搜索 Python 教程")
 
-    def test_extract_from_last_user_message(self):
+    def test_extract_from_last_user_message(self) -> None:
         messages = [
             {"role": "assistant", "content": "你好"},
             {"role": "user", "content": "明天会下雨吗"}
@@ -93,22 +93,22 @@ class TestExtractQuery(unittest.TestCase):
         result = extract_query(messages)
         self.assertEqual(result, "明天会下雨吗")
 
-    def test_extract_empty_messages(self):
+    def test_extract_empty_messages(self) -> None:
         result = extract_query([])
         self.assertEqual(result, "")
 
-    def test_extract_empty_content(self):
+    def test_extract_empty_content(self) -> None:
         messages = [{"role": "user", "content": ""}]
         result = extract_query(messages)
         self.assertEqual(result, "")
 
 
 class TestBypassToolsConfig(unittest.TestCase):
-    def test_bypass_tools_contains_expected_tools(self):
+    def test_bypass_tools_contains_expected_tools(self) -> None:
         self.assertIn("web_search", BYPASS_TOOLS)
         self.assertIn("mcp__MiniMax__web_search", BYPASS_TOOLS)
 
-    def test_bypass_tool_has_mmx_type(self):
+    def test_bypass_tool_has_mmx_type(self) -> None:
         for tool_name, handler in BYPASS_TOOLS.items():
             self.assertEqual(handler["type"], "mmx")
 

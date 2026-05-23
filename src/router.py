@@ -14,7 +14,7 @@ import logging
 import asyncio
 import threading
 from datetime import datetime
-from typing import Any, List, Dict
+from typing import Any, List, Dict, Optional
 
 import httpx
 import uvicorn
@@ -80,7 +80,7 @@ for _rd in ("data", "logs"):
     os.makedirs(os.path.join(get_base_dir(), _rd), exist_ok=True)
 
 # 错误现场归档
-def save_error_archive(timestamp, model, request_body, openai_payload, response_text, status_code):
+def save_error_archive(timestamp, model, request_body, openai_payload, response_text, status_code) -> None:
     """400 错误时自动保存完整上下文到 error-archive/，便于事后复盘"""
     archive_dir = config.error_archive_dir
     os.makedirs(archive_dir, exist_ok=True)
@@ -102,7 +102,20 @@ def save_error_archive(timestamp, model, request_body, openai_payload, response_
         logger.warning(f"[Error Archive] 归档失败: {e}")
 
 
-def update_archive_limiter(interval_seconds: int):
+def maybe_archive(status_code: int, model: str, request_body, openai_payload, response_text: str) -> None:
+    """限速归档辅助函数，避免重复模式"""
+    if status_code >= 400 and error_archive_limiter.archive():
+        save_error_archive(
+            datetime.now().isoformat(),
+            model,
+            request_body,
+            openai_payload,
+            response_text,
+            status_code
+        )
+
+
+def update_archive_limiter(interval_seconds: int) -> None:
     """更新错误归档限速间隔"""
     error_archive_limiter.update(max(interval_seconds, 1))
 
@@ -146,7 +159,7 @@ def load_custom_models():
         except Exception:
             return []
 
-def save_custom_models(models):
+def save_custom_models(models) -> None:
     global _custom_models_cache, _custom_models_cache_valid
     with _custom_models_lock:
         with open(CUSTOM_MODELS_FILE, "w") as f:
@@ -165,7 +178,7 @@ def merge_models(upstream, custom):
 
 
 class Config:
-    def __init__(self):
+    def __init__(self) -> None:
         self.opencode_base_url = os.getenv("OPENCODE_BASE_URL", "https://opencode.ai/zen/go")
         self.opencode_api_key = os.getenv("OPENCODE_API_KEY", "")
         self.router_port = int(os.getenv("ROUTER_PORT", "4001"))
@@ -194,7 +207,7 @@ class Config:
         ]
         self.models = merge_models(DEFAULT_MODELS, load_custom_models())
 
-    def reload(self):
+    def reload(self) -> None:
         load_dotenv(override=True)
         self.__init__()
         logger.setLevel(getattr(logging, config.log_level.upper()))
@@ -309,19 +322,19 @@ def load_stats():
     except Exception:
         return {"requests": 0, "errors": 0}
 
-def increment_requests():
+def increment_requests() -> None:
     global request_count
     with _stats_lock:
         request_count += 1
         save_stats_unlocked()
 
-def increment_errors():
+def increment_errors() -> None:
     global error_count
     with _stats_lock:
         error_count += 1
         save_stats_unlocked()
 
-def save_stats_unlocked():
+def save_stats_unlocked() -> None:
     """无锁版 save_stats，供内部调用"""
     global _stats_dirty
     try:
@@ -711,14 +724,13 @@ async def call_opencode(endpoint: str, payload: dict, base_url: str = None, api_
                 logger.warning(log_msg)
 
                 # 限速归档
-                if response.status_code >= 400 and error_archive_limiter.archive():
-                    save_error_archive(
-                        datetime.now().isoformat(),
+                if response.status_code >= 400:
+                    maybe_archive(
+                        response.status_code,
                         payload.get("model", "unknown"),
                         payload,
                         None,
-                        response.text,
-                        response.status_code
+                        response.text
                     )
 
                 if strategy == RetryStrategy.FAIL_FAST:
@@ -836,9 +848,13 @@ async def anthropic_messages(request: Request):
             logger.debug(f"[Passthrough Response] model={model_name}, status={response.status_code}, is_sse={is_sse}, content_type={response.headers.get('content-type','?')}, len={len(raw_text)}")
             if response.status_code != 200:
                 logger.error(f"[Passthrough] {model_name} status={response.status_code}: {raw_text[:500]}")
-                if response.status_code >= 400 and error_archive_limiter.archive():
-                    save_error_archive(
-                        datetime.now().isoformat(), model_name, body, None, raw_text, response.status_code
+                if response.status_code >= 400:
+                    maybe_archive(
+                        response.status_code,
+                        model_name,
+                        body,
+                        None,
+                        raw_text
                     )
                 raise HTTPException(status_code=response.status_code, detail=raw_text[:2000])
             if config.detailed_logging:
@@ -863,10 +879,7 @@ async def anthropic_messages(request: Request):
             if response.status_code != 200:
                 error_detail = response.text
                 logger.error(f"[Error] OpenCode API status={response.status_code}: {error_detail[:500]}")
-                if response.status_code >= 400 and error_archive_limiter.archive():
-                    save_error_archive(
-                        datetime.now().isoformat(), model_name, body, None, error_detail, response.status_code
-                    )
+                maybe_archive(response.status_code, model_name, body, None, error_detail)
                 raise HTTPException(status_code=response.status_code, detail=error_detail)
 
             raw_text = response.text
@@ -940,10 +953,7 @@ async def anthropic_messages(request: Request):
 
         if response.status_code != 200:
             logger.error(f"[Error] OpenCode API: status={response.status_code}, body={raw_text[:2000]}")
-            if response.status_code >= 400 and error_archive_limiter.archive():
-                save_error_archive(
-                    datetime.now().isoformat(), model_name, body, openai_payload, raw_text, response.status_code
-                )
+            maybe_archive(response.status_code, model_name, body, openai_payload, raw_text)
             raise HTTPException(status_code=response.status_code, detail=raw_text[:2000])
 
         # 转换响应
@@ -1050,7 +1060,7 @@ def mask_key(key: str) -> str:
     return key[:4] + "***" + key[-4:]
 
 
-def update_env_file(**kwargs):
+def update_env_file(**kwargs) -> None:
     """更新 .env 文件中的键值对，保留注释和格式"""
     env_path = ".env"
     keys_updated = set()
@@ -1082,7 +1092,7 @@ def update_env_file(**kwargs):
     config.reload()
 
 
-def backup_claude_settings():
+def backup_claude_settings() -> None:
     """首次修改前备份原始 ~/.claude/settings.json，仅备份一次"""
     path = config.claude_settings_path
     if not path or not os.path.exists(path):
@@ -1113,7 +1123,7 @@ def backup_claude_settings():
         logger.warning(f"[Backup] 备份失败: {e}")
 
 
-def sync_claude_settings():
+def sync_claude_settings() -> Optional[bool]:
     """同步路由器配置到 Claude Code 的 settings.json（模型名、Base URL、Auth Token）"""
     # 修改前备份原始配置（仅首次）
     backup_claude_settings()
@@ -1146,7 +1156,7 @@ def sync_claude_settings():
         return False
 
 
-async def _check_github_update():
+async def _check_github_update() -> None:
     async with _UPDATE_CHECK_LOCK:
         if _update_cache["checked"]:
             return
@@ -1357,7 +1367,7 @@ async def serve_index():
 
 
 # ============ 启动 ============
-def main():
+def main() -> None:
     """cc2go CLI entry point: start the FastAPI server"""
     config.models = merge_models(DEFAULT_MODELS, load_custom_models())
     print()
