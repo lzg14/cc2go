@@ -81,7 +81,8 @@ def save_error_archive(timestamp, model, request_body, openai_payload, response_
     archive_dir = config.error_archive_dir
     os.makedirs(archive_dir, exist_ok=True)
     safe_ts = timestamp.replace(":", "").replace("/", "-")
-    path = os.path.join(archive_dir, f"{safe_ts}-{model}-{status_code}.json")
+    model_safe = re.sub(r'[^a-zA-Z0-9_-]', '_', model)[:64]
+    path = os.path.join(archive_dir, f"{safe_ts}-{model_safe}-{status_code}.json")
     try:
         with open(path, "w", encoding="utf-8") as f:
             json.dump({
@@ -122,16 +123,32 @@ DEFAULT_MODELS = {
 
 CUSTOM_MODELS_FILE = os.path.join(get_base_dir(), "data", "custom_models.json")
 
+_custom_models_lock = threading.Lock()
+_custom_models_cache_valid = False
+_custom_models_cache = []
+
 def load_custom_models():
-    try:
-        with open(CUSTOM_MODELS_FILE, "r") as f:
-            return json.load(f)
-    except Exception:
-        return []
+    global _custom_models_cache, _custom_models_cache_valid
+    if _custom_models_cache_valid:
+        return _custom_models_cache
+    with _custom_models_lock:
+        if _custom_models_cache_valid:
+            return _custom_models_cache
+        try:
+            with open(CUSTOM_MODELS_FILE, "r") as f:
+                _custom_models_cache = json.load(f)
+                _custom_models_cache_valid = True
+                return _custom_models_cache
+        except Exception:
+            return []
 
 def save_custom_models(models):
-    with open(CUSTOM_MODELS_FILE, "w") as f:
-        json.dump(models, f, indent=2, ensure_ascii=False)
+    global _custom_models_cache, _custom_models_cache_valid
+    with _custom_models_lock:
+        with open(CUSTOM_MODELS_FILE, "w") as f:
+            json.dump(models, f, indent=2, ensure_ascii=False)
+        _custom_models_cache = models
+        _custom_models_cache_valid = True
 
 def merge_models(upstream, custom):
     """合并上游模型和自定义模型，自定义模型优先"""
@@ -647,6 +664,19 @@ def convert_response_to_anthropic(result: Dict, model: str) -> Dict:
     }
 
 
+_client: httpx.AsyncClient | None = None
+_client_lock = threading.Lock()
+
+def get_http_client() -> httpx.AsyncClient:
+    """全局 HTTP 客户端，单例复用"""
+    global _client
+    if _client is None:
+        with _client_lock:
+            if _client is None:
+                _client = httpx.AsyncClient(timeout=180.0)
+    return _client
+
+
 async def call_opencode(endpoint: str, payload: dict, base_url: str = None, api_key: str = None, full_url: str = None) -> httpx.Response:
     """调用 API，带重试。连接异常时重建 client 避免复用坏连接"""
     url = full_url or f"{base_url or config.opencode_base_url}{endpoint}"
@@ -657,7 +687,7 @@ async def call_opencode(endpoint: str, payload: dict, base_url: str = None, api_
         "x-api-key": key
     }
     fallback_idx = 0  # <-- 初始化在循环外
-    client = httpx.AsyncClient(timeout=180.0)
+    client = get_http_client()
     try:
         for attempt in range(config.max_retry):
             try:
@@ -714,7 +744,7 @@ async def call_opencode(endpoint: str, payload: dict, base_url: str = None, api_
                 else:
                     raise HTTPException(status_code=500, detail=str(e))
     finally:
-        await client.aclose()
+        pass  # client 由全局单例管理，无需关闭
 
     raise HTTPException(status_code=500, detail="OpenCode API 调用失败")
 
