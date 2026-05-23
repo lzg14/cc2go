@@ -1,4 +1,4 @@
-# cc2go <small>v0.7.5</small>
+# cc2go <small>v0.7.7</small>
 
 <p align="center">
   <b>Claude Code → OpenCode Go Adapter</b>

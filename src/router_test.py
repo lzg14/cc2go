@@ -2,7 +2,11 @@
 路由器核心格式转换 - 单元测试
 """
 import unittest
-from src.router import convert_anthropic_messages_to_openai, convert_tools, sanitize_tool_name, clean_schema
+from unittest.mock import AsyncMock, patch, MagicMock
+from src.router import (
+    convert_anthropic_messages_to_openai, convert_tools, sanitize_tool_name,
+    clean_schema, call_opencode, get_http_client,
+)
 
 
 class TestConvertMessages(unittest.TestCase):
@@ -437,24 +441,26 @@ class TestVerifyMasterKey(unittest.TestCase):
         self.assertEqual(ctx.exception.status_code, 401)
 
 
-class TestCallOpencode(unittest.TestCase):
+class TestCallOpencode(unittest.IsolatedAsyncioTestCase):
     """call_opencode HTTP 客户端测试"""
 
-    def test_200_response(self) -> None:
-        from unittest.mock import AsyncMock, patch, MagicMock
-        from src.router import call_opencode
+    async def test_200_response(self) -> None:
         mock_response = MagicMock()
         mock_response.status_code = 200
         mock_response.text = '{"result":"ok"}'
         mock_client = AsyncMock()
         mock_client.post.return_value = mock_response
         with patch("src.router.get_http_client", return_value=mock_client):
-            # 直接测很难，因为 call_opencode 是 async 且用全局 client
-            # 改用 builder 模式验证参数构建
-            pass  # 跳过（需重构成可测试）
+            result = await call_opencode(
+                endpoint="/v1/chat/completions",
+                payload={"model": "test", "messages": [{"role": "user", "content": "hi"}]},
+                api_key="test-key",
+            )
+        self.assertEqual(result.status_code, 200)
+        self.assertEqual(result.text, '{"result":"ok"}')
+        mock_client.post.assert_called_once()
 
     def test_http_client_singleton(self) -> None:
-        from src.router import get_http_client
         c1 = get_http_client()
         c2 = get_http_client()
         self.assertIs(c1, c2)  # 验证是同一个实例

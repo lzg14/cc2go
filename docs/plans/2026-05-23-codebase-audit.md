@@ -1,6 +1,6 @@
 # cc2go Codebase Audit v7
 
-> 审计日期：2026-05-23 | 版本：0.7.6
+> 审计日期：2026-05-23 | 版本：0.7.7
 > 基于 v6 审查（code-review-v6.md）的延续，新增代码审计发现
 > 审查范围：src/router.py, src/tray.py, src/streaming.py, src/mcp_bypass.py, src/error_handler.py, 全部测试文件
 
@@ -333,30 +333,32 @@ from router import ...
 
 ---
 
-## 修复完成状态（2026-05-23）
+## 修复完成状态（最终）
 
-### ✅ 已修复（均在 v0.7.7 提交中）
+### ✅ v0.7.7 全部修复
 
-| 项目 | 内容 | commit |
-|------|------|--------|
-| **H1** | `save_error_archive()` model 参数 `re.sub()` 消毒 | 053e893 |
-| **H2** | `httpx.AsyncClient` 全局单例 `get_http_client()` | 053e893 |
-| **H3** | `custom_models.json` 读写加 `threading.Lock` | 053e893 |
-| **H4** | `load_custom_models()` 加内存缓存 + `_cache_valid` 标志 | 053e893 |
-| **M1** | `streaming.py` logger 改为 `"llm_router"` | 053e893 |
-| **M5** | 流式 tool_call args 增量发送（`_args_sent`） | 053e893 |
-| **L2** | 移除冗余 `x-api-key` 请求头 | 053e893 |
-| **M4** | `tray.py` 缺 `as e` 修复 + 各 `except` 补日志 | 当前版本 |
-| **M2** | `get_base_dir()` 抽到 `src/utils.py`，两处 import | 当前版本 |
-| **L3** | 测试文件 `sys.path.insert` 改为 `from src.xxx import`，`router.py` 改用相对导入 `from .error_handler` | 当前版本 |
-
-### ❌ 跳过 / 待处理
-
-| 项目 | 原因 |
+| 项目 | 内容 |
 |------|------|
-| **M3** | 错误归档重复模式，涉及 4 处，改动量较大风险高，暂跳过 |
-| **L1** | 20+ 函数补类型注解，纯体力活，暂跳过 |
-| **H5** | 核心函数缺 🔴 需制定单独测试计划，见下 |
+| **H1** | `save_error_archive()` model 参数 `re.sub()` 消毒 |
+| **H2** | `httpx.AsyncClient` 全局单例 `get_http_client()` |
+| **H3** | `custom_models.json` 读写加 `threading.Lock` + 内存缓存 |
+| **H4** | `load_custom_models()` 加内存缓存 + `_cache_valid` 标志 |
+| **M1** | `streaming.py` logger 改为 `"llm_router"` |
+| **M5** | 流式 tool_call args 增量发送（`_args_sent`） |
+| **L2** | 移除冗余 `x-api-key` 请求头 |
+| **M4** | `tray.py` 缺 `as e` 修复 + 各 `except` 补日志 |
+| **M2** | `get_base_dir()` 抽到 `src/utils.py`，两处 import |
+| **L3** | 测试文件 `sys.path.insert` 改为 `from src.xxx import`，路由改用相对导入 |
+| **M3** | `maybe_archive()` 提取为工具函数，4 处调用点全部替换 |
+| **H5** | `resolve_model_name()` 测试 — 4 个用例 |
+| **H5** | `convert_response_to_anthropic()` 测试 — 4 个用例 |
+| **H5** | `call_opencode()` 测试 — 1 个真实 mock 用例（IsolatedAsyncioTestCase） |
+| **H5** | `verify_master_key()` 测试 — 3 个用例（有效/缺失/不匹配） |
+| **H5** | `convert_openai_stream_to_anthropic()` 测试 — 2 个异步集成用例 |
+| **L1** | `streaming.py` 6 个函数补 `-> Dict` 类型注解 |
+| **L1** | `router.py` 16 个函数全部补齐类型注解 |
+
+### 最终测试总量：127 个（v0.7.6 前 112 个 → 新增 15 个）
 
 ---
 

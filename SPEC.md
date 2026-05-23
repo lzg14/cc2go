@@ -1,6 +1,6 @@
 # cc2go 版本管理规范 (SPEC)
 
-> 当前版本：0.7.6 | 更新：2026-05-23
+> 当前版本：0.7.7 | 更新：2026-05-23
 > 技术架构参见 [ARCHITECTURE.md](ARCHITECTURE.md)
 
 ---
@@ -57,7 +57,7 @@ git push && git push --tags
 
 | 版本 | 日期 | 主要变更 |
 |------|------|---------|
-| 0.7.6 | 2026-05-23 | 修复：ruff lint 错误（缺少 Any import、变量名 l 歧义、重复测试函数） |
+| 0.7.7 | 2026-05-23 | 审计修复 v7：路径穿越/H2-H4/M4 安全修复、get_base_dir 抽到 utils、测试 import 统一、maybe_archive 提取、新增 15 个测试、类型注解补全；总测试 127 个 |
 | 0.7.5 | 2026-05-23 | 修复：CLAUDE_SETTINGS_PATH 中 `~` 未展开导致 sync_claude_settings 静默失败；selectModel 同时发送 router_port 确保端口同步 |
 | 0.7.4 | 2026-05-22 | 修复：ADMIN_HTML 分离到 static/index.html（router.py 减少 ~660 行）、删除 save_stats() 冗余函数、streaming.py 添加上游断开异常处理；默认监听改为 127.0.0.1 |
 | 0.7.3 | 2026-05-22 | 新增：PyPI 发布支持 (`pip install cc2go`)、`cc2go` CLI 命令、`src/__init__.py` 包结构；首次启动引导（API Key 未配置警告横幅）、新版本检测横幅（GitHub API）；默认端口改为 4001 |
