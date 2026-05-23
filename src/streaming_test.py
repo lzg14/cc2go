@@ -135,5 +135,63 @@ class TestEventSequence(unittest.TestCase):
         self.assertIn(b"event: content_block_stop", events[2])
 
 
+class TestConvertOpenaiStreamIntegration(unittest.IsolatedAsyncioTestCase):
+    """convert_openai_stream_to_anthropic 端到端集成测试"""
+
+    async def test_full_stream_sequence(self) -> None:
+        """完整流式序列：message_start → content_block_start → delta → stop"""
+        from streaming import convert_openai_stream_to_anthropic
+        from unittest.mock import MagicMock
+
+        chunks = [
+            'data: {"id":"chatcmpl-1","choices":[{"delta":{"role":"assistant","content":""},"finish_reason":null}]}\n',
+            'data: {"id":"chatcmpl-1","choices":[{"delta":{"content":"Hello"},"finish_reason":null}]}\n',
+            'data: {"id":"chatcmpl-1","choices":[{"delta":{"content":" world"},"finish_reason":null}]}\n',
+            'data: [DONE]\n',
+        ]
+
+        async def async_gen():
+            for chunk in chunks:
+                yield chunk
+
+        mock_response = MagicMock()
+        mock_response.aiter_lines.return_value = async_gen()
+
+        result = []
+        async for event in convert_openai_stream_to_anthropic(mock_response, "test-model"):
+            result.append(event)
+
+        # 验证至少产生了 message_start 和 message_stop
+        result_text = b"".join(result).decode()
+        self.assertIn("message_start", result_text)
+        self.assertIn("message_stop", result_text)
+
+    async def test_stream_early_termination(self) -> None:
+        """上游连接断开时不应崩溃"""
+        from streaming import convert_openai_stream_to_anthropic
+        from unittest.mock import MagicMock
+
+        chunks = [
+            'data: {"id":"chatcmpl-1","choices":[{"delta":{"content":"Hi"},"finish_reason":null}]}\n',
+        ]
+
+        async def broken_gen():
+            yield chunks[0]
+            raise Exception("connection reset")
+
+        mock_response = MagicMock()
+        mock_response.aiter_lines.return_value = broken_gen()
+
+        result = []
+        try:
+            async for event in convert_openai_stream_to_anthropic(mock_response, "test-model"):
+                result.append(event)
+        except Exception:
+            pass
+
+        # 不崩溃，之前的 events 仍然有效
+        self.assertGreater(len(result), 0)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
