@@ -613,14 +613,17 @@ def _pad_missing_tool_results(messages: List[Dict]) -> List[Dict]:
                 i += 1
 
             # 为缺失的 id 插入空 tool 消息
+            # 仅在已有部分 tool 消息时补齐（部分网络中断），
+            # 完全没有 tool 消息 → 说明刚生成完 tool_calls 等待工具结果，不应硬塞
             missing = tc_ids - handled
-            for tc_id in sorted(missing):
-                result.append({
-                    "role": "tool",
-                    "tool_call_id": tc_id,
-                    "content": "",
-                })
-                logger.debug("[ToolCompat] Inserted empty tool result for %s", tc_id)
+            if handled and missing:
+                for tc_id in sorted(missing):
+                    result.append({
+                        "role": "tool",
+                        "tool_call_id": tc_id,
+                        "content": "",
+                    })
+                    logger.debug("[ToolCompat] Inserted empty tool result for %s", tc_id)
 
             continue  # i 已在内部循环推进
 
