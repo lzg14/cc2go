@@ -151,6 +151,8 @@ DEFAULT_MODELS = {
     "minimax-m2.5": {"id": "minimax-m2.5", "endpoint": "/v1/messages"},
 }
 
+
+
 CUSTOM_MODELS_FILE = os.path.join(get_base_dir(), "data", "custom_models.json")
 
 _custom_models_lock = threading.Lock()
