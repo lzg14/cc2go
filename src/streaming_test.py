@@ -140,7 +140,7 @@ class TestConvertOpenaiStreamIntegration(unittest.IsolatedAsyncioTestCase):
 
     async def test_full_stream_sequence(self) -> None:
         """完整流式序列：message_start → content_block_start → delta → stop"""
-        from streaming import convert_openai_stream_to_anthropic
+        from src.streaming import convert_openai_stream_to_anthropic
         from unittest.mock import MagicMock
 
         chunks = [
@@ -168,7 +168,7 @@ class TestConvertOpenaiStreamIntegration(unittest.IsolatedAsyncioTestCase):
 
     async def test_stream_early_termination(self) -> None:
         """上游连接断开时不应崩溃"""
-        from streaming import convert_openai_stream_to_anthropic
+        from src.streaming import convert_openai_stream_to_anthropic
         from unittest.mock import MagicMock
 
         chunks = [

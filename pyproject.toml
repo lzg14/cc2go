@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "cc2go"
-version = "0.8.0"
+version = "0.8.1"
 description = "Claude Code to OpenCode Go adapter — route Anthropic format to OpenAI models"
 readme = "README.md"
 requires-python = ">=3.9"
@@ -42,7 +42,7 @@ BugTracker = "https://github.com/lzg14/cc2go/issues"
 
 [tool.setuptools]
 package-dir = {"" = "src"}
-py-modules = ["router", "tray", "streaming", "mcp_bypass", "error_handler", "utils"]
+py-modules = ["router", "tray", "streaming", "mcp_bypass", "error_handler", "utils", "compression"]
 
 [project.scripts]
 cc2go = "router:main"

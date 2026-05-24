@@ -25,6 +25,8 @@ from dotenv import load_dotenv
 from .streaming import convert_openai_stream_to_anthropic
 from .mcp_bypass import (
     should_bypass,
+    should_tool_declaration_bypass,
+    has_anthropic_builtin_tool,
     handle_bypass,
     extract_query,
     apply_response_bypass,
@@ -36,7 +38,13 @@ from .error_handler import (
     RetryStrategy,
     _archive_limiter as error_archive_limiter,
 )
-from utils import get_base_dir
+# 保证从项目根可导入 src.utils
+_src_dir = os.path.dirname(os.path.abspath(__file__))
+_proj_root = os.path.dirname(_src_dir)
+if _proj_root not in sys.path:
+    sys.path.insert(0, _proj_root)
+
+from src.utils import get_base_dir  # noqa: E402
 
 def verify_master_key(request: Request) -> None:
     authorization = request.headers.get("Authorization")
@@ -125,7 +133,7 @@ def update_archive_limiter(interval_seconds: int) -> None:
     error_archive_limiter.update(max(interval_seconds, 1))
 
 
-VERSION = "0.8.0"
+VERSION = "0.8.1"
 
 # ============ 配置 ============
 DEFAULT_MODELS = {
@@ -211,6 +219,7 @@ class Config:
             if m.strip()
         ]
         self.models = merge_models(DEFAULT_MODELS, load_custom_models())
+        self.compression_enabled = os.getenv("COMPRESSION_ENABLED", "false").lower() == "true"
 
     def reload(self) -> None:
         load_dotenv(override=True)
@@ -834,13 +843,31 @@ async def anthropic_messages(request: Request):
         body = await request.json()
         logger.debug(f"[ENTER] raw_body_model={body.get('model')}, stream={body.get('stream')}, msgs={len(body.get('messages',[]))}")
 
-        # MCP 工具短路检测
+        # MCP 工具短路检测（响应层：tool_use 块）
         bypass, tool_name = should_bypass(body)
         if bypass:
             logger.info(f"[Bypass] tool={tool_name}, shortcutting request")
             query = extract_query(body.get("messages", []))
             result = await handle_bypass(tool_name, query)
             return JSONResponse(content=result)
+
+        # 工具声明层 bypass：用户有搜索意图 + tools 中有 web_search 声明 → 直接 mmx search
+        bypass, tool_name = should_tool_declaration_bypass(body)
+        if bypass:
+            logger.info(f"[Bypass/ToolDecl] tool={tool_name}, executing bypass")
+            query = extract_query(body.get("messages", []))
+            result = await handle_bypass(tool_name, query)
+            return JSONResponse(content=result)
+
+        # 移除非标准内置工具声明（如 web_search_20250305），非 Anthropic 模型无法解析
+        raw_tools = body.get("tools", [])
+        if raw_tools and has_anthropic_builtin_tool(body):
+            cleaned = [t for t in raw_tools if not isinstance(t, dict) or not any(
+                t.get("type", "").startswith(p) for p in ["web_search"]
+            )]
+            if len(cleaned) != len(raw_tools):
+                logger.info(f"[Sanitize] removed {len(raw_tools) - len(cleaned)} Anthropic built-in tool(s)")
+                body["tools"] = cleaned
 
         model_name = body.get("model", "glm-5.1")
         # 如果管理员在页面选了模型，覆盖客户端传来的模型名
@@ -1262,6 +1289,7 @@ async def get_config_api():
         "selected_model": config.selected_model,
         "claude_model_alias": config.claude_model_alias,
         "models": sorted(config.models.keys()),
+        "compression_enabled": config.compression_enabled,
         "stats": {
             "requests": request_count,
             "errors": error_count,
@@ -1372,6 +1400,34 @@ async def save_custom_models_api(models: list = Body(...)):
     return {"status": "ok", "count": len(models)}
 
 
+@app.get("/api/compression")
+async def get_compression():
+    """RTK 压缩状态"""
+    from .compression import get_status as _cs
+    status = _cs()
+    return {
+        "enabled": config.compression_enabled,
+        "installed": status["installed"],
+        "rtk_path": status["rtk_path"],
+        "version": status["version"],
+    }
+
+
+@app.post("/api/compression/toggle")
+async def toggle_compression(data: dict = Body(...)):
+    """启用/禁用 RTK 压缩"""
+    enabled = data.get("enabled", False)
+    update_env_file(COMPRESSION_ENABLED=str(enabled).lower())
+
+    if enabled:
+        from .compression import setup_rtk as _setup
+        result = _setup()
+        return {"status": result["status"], "message": result["message"],
+                "enabled": True, "rtk_path": result["rtk_path"], "version": result["version"]}
+    else:
+        return {"status": "ok", "message": "压缩已禁用", "enabled": False, "rtk_path": "", "version": ""}
+
+
 @app.post("/api/config/restore")
 async def restore_claude_config():
     """从备份恢复原始 Claude Code 配置"""
@@ -1428,6 +1484,17 @@ async def serve_index():
 def main() -> None:
     """cc2go CLI entry point: start the FastAPI server"""
     config.models = merge_models(DEFAULT_MODELS, load_custom_models())
+
+    # 启动时检查 RTK 压缩
+    if config.compression_enabled:
+        logger.info("[RTK] 压缩已启用，检查 RTK 状态...")
+        try:
+            from .compression import setup_rtk as _setup_rtk
+            r = _setup_rtk()
+            logger.info(f"[RTK] {r['message']}")
+        except Exception as e:
+            logger.warning(f"[RTK] 初始化失败: {e}")
+
     print()
     print("=" * 60)
     print(f"  cc2go v{VERSION}  --  Claude Code -> OpenCode Go")

@@ -1,4 +1,4 @@
-# cc2go <small>v0.8.0</small>
+# cc2go <small>v0.8.1</small>
 
 <p align="center">
   <b>Claude Code → OpenCode Go Adapter</b>
@@ -38,7 +38,9 @@
 - 🔧 **Tool name sanitization** — Replaces special characters in tool names to prevent 400 errors
 - 🧹 **Schema cleaning** — Recursively removes incompatible JSON Schema fields for broader model compatibility
 - 🔄 **Model switching compatibility** — Auto-completes missing tool results when switching between strict (DeepSeek) and lenient (MiniMax) models
-- ⚡ **Web search bypass** — Intercepts `web_search` tool calls at the response level, runs `mmx` search locally, returns results immediately without extra round-trips
+- ⚡ **Web search bypass** — Intercepts `web_search` tool calls (both tool declarations and tool_use responses), runs `mmx` search locally, returns results immediately without extra round-trips
+- 🤖 **Non-Claude model compatibility** — Automatically strips Anthropic built-in tool types (`web_search_20250305`) when routing to non-Anthropic models, preventing 400 errors
+- 📦 **CLI output compression** — Optional RTK integration compresses git/ls/find output by 70%+, auto-downloads on toggle in "高级选项"
 
 ---
 

@@ -7,6 +7,8 @@ import unittest
 from unittest.mock import AsyncMock, patch
 from src.mcp_bypass import (
     should_bypass,
+    should_tool_declaration_bypass,
+    has_anthropic_builtin_tool,
     extract_query,
     BYPASS_TOOLS,
     find_bypass_tool_uses,
@@ -255,6 +257,103 @@ class TestApplyResponseBypass(unittest.TestCase):
         self.assertEqual(result["content"][2]["type"], "tool_use")
         self.assertEqual(result["content"][2]["name"], "bash")
         self.assertEqual(result["stop_reason"], "end_turn")
+
+
+class TestToolDeclarationBypass(unittest.TestCase):
+    def test_no_tools_returns_false(self) -> None:
+        body = {"messages": [{"role": "user", "content": "hi"}]}
+        result = should_tool_declaration_bypass(body)
+        self.assertEqual(result, (False, None))
+
+    def test_empty_tools_returns_false(self) -> None:
+        body = {"messages": [{"role": "user", "content": "hi"}], "tools": []}
+        result = should_tool_declaration_bypass(body)
+        self.assertEqual(result, (False, None))
+
+    def test_web_search_20250305_no_search_intent_does_not_bypass(self) -> None:
+        """正常对话有 web_search 声明但不搜东西 → 不应 bypass"""
+        body = {
+            "messages": [{"role": "user", "content": "写一个 Python 脚本"}],
+            "tools": [{"type": "web_search_20250305", "name": "web_search", "max_uses": 8}]
+        }
+        result = should_tool_declaration_bypass(body)
+        self.assertEqual(result, (False, None))
+
+    def test_web_search_20250305_with_search_intent_triggers_bypass(self) -> None:
+        body = {
+            "messages": [{"role": "user", "content": "search for AI news"}],
+            "tools": [{"type": "web_search_20250305", "name": "web_search", "max_uses": 8}]
+        }
+        bypass, tool_name = should_tool_declaration_bypass(body)
+        self.assertTrue(bypass)
+        self.assertEqual(tool_name, "web_search")
+
+    def test_web_search_with_search_intent_triggers_bypass(self) -> None:
+        body = {
+            "messages": [{"role": "user", "content": "search for latest technology"}],
+            "tools": [{"name": "web_search", "description": "Web search tool"}]
+        }
+        bypass, tool_name = should_tool_declaration_bypass(body)
+        self.assertTrue(bypass)
+        self.assertEqual(tool_name, "web_search")
+
+    def test_web_search_no_intent_does_not_bypass(self) -> None:
+        """有 web_search 工具但用户说别的事 → 不应 bypass"""
+        body = {
+            "messages": [{"role": "user", "content": "解释一下量子计算"}],
+            "tools": [{"name": "web_search", "description": "Web search tool"}]
+        }
+        result = should_tool_declaration_bypass(body)
+        self.assertEqual(result, (False, None))
+
+    def test_mcp_prefixed_bypass_tool_triggers_bypass(self) -> None:
+        body = {
+            "messages": [{"role": "user", "content": "search for quantum computing"}],
+            "tools": [{"name": "mcp__MiniMax__web_search", "description": "MCP search"}]
+        }
+        bypass, tool_name = should_tool_declaration_bypass(body)
+        self.assertTrue(bypass)
+        self.assertEqual(tool_name, "mcp__MiniMax__web_search")
+
+    def test_non_bypass_tool_returns_false(self) -> None:
+        body = {
+            "messages": [{"role": "user", "content": "write code"}],
+            "tools": [{"name": "bash", "description": "Run bash commands"}]
+        }
+        result = should_tool_declaration_bypass(body)
+        self.assertEqual(result, (False, None))
+
+    def test_mixed_tools_finds_bypass(self) -> None:
+        body = {
+            "messages": [{"role": "user", "content": "search for AI papers"}],
+            "tools": [
+                {"name": "bash", "description": "Run bash"},
+                {"name": "web_search", "description": "Web search"}
+            ]
+        }
+        bypass, tool_name = should_tool_declaration_bypass(body)
+        self.assertTrue(bypass)
+        self.assertEqual(tool_name, "web_search")
+
+    def test_cn_search_intent_triggers_bypass(self) -> None:
+        body = {
+            "messages": [{"role": "user", "content": "搜索一下最新的科技新闻"}],
+            "tools": [{"type": "web_search_20250305", "name": "web_search", "max_uses": 8}]
+        }
+        bypass, tool_name = should_tool_declaration_bypass(body)
+        self.assertTrue(bypass)
+        self.assertEqual(tool_name, "web_search")
+
+    def test_has_anthropic_builtin_tool_returns_true(self) -> None:
+        body = {
+            "messages": [{"role": "user", "content": "hi"}],
+            "tools": [{"type": "web_search_20250305", "name": "web_search", "max_uses": 8}]
+        }
+        self.assertTrue(has_anthropic_builtin_tool(body))
+
+    def test_has_anthropic_builtin_tool_no_tools_returns_false(self) -> None:
+        body = {"messages": [{"role": "user", "content": "hi"}]}
+        self.assertFalse(has_anthropic_builtin_tool(body))
 
 
 class TestBypassToolsConfig(unittest.TestCase):

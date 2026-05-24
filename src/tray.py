@@ -23,6 +23,7 @@ if _proj_root not in sys.path:
 
 from src.router import app, config, logger, VERSION  # noqa: E402
 from src.utils import get_base_dir  # noqa: E402
+from src.compression import setup_rtk as _setup_rtk  # noqa: E402
 
 # get_static_dir 已在 router.py 定义，此处直接使用
 def get_static_dir():
@@ -191,6 +192,16 @@ def _auto_open_admin() -> None:
 def main() -> None:
     os.chdir(get_base_dir())
     kill_old_process()
+
+    # 启动时检查 RTK 压缩
+    if config.compression_enabled:
+        print("[cc2go] 压缩已启用，检查 RTK 状态...")
+        try:
+            r = _setup_rtk()
+            print(f"[cc2go] {r['message']}")
+        except Exception as e:
+            print(f"[cc2go] RTK 初始化失败: {e}")
+
     save_pid()
     atexit.register(remove_pid)
 

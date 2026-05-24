@@ -71,6 +71,78 @@ def should_bypass(body: Dict) -> Tuple[bool, Optional[str]]:
     return False, None
 
 
+SEARCH_KEYWORDS = [
+    "search", "search for", "search the web", "web search", "google",
+    "搜索", "搜一下", "搜", "查找", "查一下", "查询", "找一下",
+    "find", "look up", "lookup",
+]
+
+BUILTIN_TOOL_PREFIXES = ["web_search"]
+
+
+def _has_search_intent(messages: List[Dict]) -> bool:
+    """检测用户消息是否有搜索意图"""
+    for msg in reversed(messages):
+        if msg.get("role") == "user":
+            content = msg.get("content", "")
+            if isinstance(content, str):
+                text = content.lower().strip()
+            elif isinstance(content, list):
+                parts = [p.get("text", "") for p in content if isinstance(p, dict)]
+                text = " ".join(parts).lower().strip()
+            else:
+                continue
+            if not text:
+                continue
+            for kw in SEARCH_KEYWORDS:
+                if text.startswith(kw) or text == kw:
+                    return True
+            return False
+    return False
+
+
+def has_anthropic_builtin_tool(body: Dict) -> bool:
+    """检查 tools 数组中是否含有 Anthropic 内置工具声明（如 web_search_20250305）"""
+    tools = body.get("tools", [])
+    for t in tools:
+        if not isinstance(t, dict):
+            continue
+        ttype = t.get("type", "")
+        for prefix in BUILTIN_TOOL_PREFIXES:
+            if ttype.startswith(prefix):
+                return True
+    return False
+
+
+def should_tool_declaration_bypass(body: Dict) -> Tuple[bool, Optional[str]]:
+    """
+    检测 tools 数组中的 bypass 工具声明（请求层）
+    只有用户消息有搜索意图时才 bypass，防止误拦截正常对话。
+    """
+    tools = body.get("tools", [])
+    if not tools:
+        return False, None
+
+    # 仅当用户消息有搜索意图时才触发 bypass
+    if not _has_search_intent(body.get("messages", [])):
+        return False, None
+
+    for t in tools:
+        if not isinstance(t, dict):
+            continue
+        tname = t.get("name", "")
+        ttype = t.get("type", "")
+        if tname in BYPASS_TOOLS:
+            logger.info(f"[Bypass/ToolDecl] HIT! name={tname}")
+            return True, tname
+        for prefix in BUILTIN_TOOL_PREFIXES:
+            if ttype.startswith(prefix):
+                logger.info(f"[Bypass/ToolDecl] HIT! type={ttype}, mapping to web_search")
+                return True, tname or "web_search"
+
+    return False, None
+
+
 def find_bypass_tool_uses(anthropic_response: Dict) -> List[Dict]:
     """查找 Anthropic 响应中包含 bypass 工具的 tool_use 块"""
     found = []

@@ -165,6 +165,8 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','SF Pro Display',sy
 <div class="form-row"><div class="form-group" data-i18n-label="maxRetry"><label>最大重试次数</label><input id="maxRetry2" type="number" min="0" max="10"></div></div>
 <div class="form-row"><div class="form-group" data-i18n-label="retryDelay"><label>重试间隔（秒）</label><input id="retryDelay2" type="number" step="0.5" min="0"></div></div>
 <div class="form-row"><div class="checkbox-row"><input id="disableThinking2" type="checkbox"><label for="disableThinking2" data-i18n="disableThinking">禁用思考模式</label></div></div>
+<div class="form-row"><div class="checkbox-row"><input id="compressionToggle" type="checkbox" onchange="compressionChanged()"><label for="compressionToggle" data-i18n="compressionLabel">启用输出压缩（RTK）</label><span id="rtkStatus" style="font-size:11px;color:#86868b;margin-left:6px"></span></div></div>
+<div style="font-size:12px;color:#86868b;margin-top:-6px;margin-left:24px" data-i18n="compressionDesc">自动下载并集成 RTK，压缩 CLI 输出节省 60-90% token（清华镜像源）</div>
 <div class="form-row"><div class="form-group"><label data-i18n="alias">CC 模型名</label><input id="claudeAlias2" data-i18n="aliasPlaceholder" placeholder="留空=使用实际模型名" style="width:100%;padding:8px 12px;border:1px solid #d2d2d7;border-radius:8px;font-size:14px;box-sizing:border-box"></div></div>
 <div style="font-size:12px;color:#86868b;margin-top:-6px" data-i18n="aliasDesc">设成视觉模型名（如 claude-sonnet-4-20250514）可让 CC 放开图片发送</div>
 <div class="modal-actions"><button class="btn btn-secondary" style="flex:none;padding:6px 16px" onclick="closeModal('advancedModal')" data-i18n="cancel">取消</button><button class="btn btn-primary" style="flex:none;padding:6px 16px" onclick="saveAdvancedModal()" data-i18n="save">保存</button></div>
@@ -278,6 +280,8 @@ const I18N = {
     logLevel: "日志级别",
     disableThinking: "禁用思考模式",
     detailedLogging: "记录详细日志",
+    compressionLabel: "启用输出压缩（RTK）",
+    compressionDesc: "自动下载并集成 RTK，压缩 CLI 输出节省 60-90% token（清华镜像源）",
     modelDisplayName: "显示名",
     modelUrl: "API 地址",
     modelFormat: "格式",
@@ -352,6 +356,8 @@ const I18N = {
     logLevel: "Log level",
     disableThinking: "Disable thinking mode",
     detailedLogging: "Detailed request logging",
+    compressionLabel: "Enable output compression (RTK)",
+    compressionDesc: "Auto-download RTK to compress CLI output, saving 60-90% tokens (Tsinghua mirror)",
     modelDisplayName: "Display Name",
     modelUrl: "API URL",
     modelFormat: "Format",
@@ -459,6 +465,7 @@ async function load() {
           t('updateTitle')+' <a href="https://github.com/lzg14/cc2go/releases" target="_blank" style="color:inherit;font-weight:600">v'+d.latest_version+'</a> · '+t('updateDesc');
       }
     }).catch(()=>{});
+    loadCompressionStatus();
     toast(t('loaded'));
   } catch(e) {
     const dot = document.getElementById('statusDot');
@@ -512,6 +519,7 @@ function syncToModals(cfg) {
   setVal('maxRetry2', cfg.max_retry);
   setVal('retryDelay2', cfg.retry_delay);
   setChecked('disableThinking2', cfg.disable_thinking);
+  setChecked('compressionToggle', cfg.compression_enabled);
   setVal('claudeAlias2', cfg.claude_model_alias);
   setVal('logLevelLogs', cfg.log_level);
   setChecked('detailedLoggingLogs', cfg.detailed_logging);
@@ -522,6 +530,39 @@ function setVal(id, v) { const el = document.getElementById(id); if (el) el.valu
 function setChecked(id, v) { const el = document.getElementById(id); if (el) el.checked = v!==false; }
 function getVal(id) { const el = document.getElementById(id); return el ? el.value : ''; }
 function getChecked(id) { const el = document.getElementById(id); return el ? el.checked : false; }
+async function compressionChanged() {
+  const enabled = document.getElementById('compressionToggle').checked;
+  const statusEl = document.getElementById('rtkStatus');
+  statusEl.textContent = '...';
+  try {
+    const r = await api('POST', '/api/compression/toggle', {enabled});
+    if (r.status === 'ok') {
+      statusEl.textContent = '✓ ' + (r.version||'');
+      toast(r.message);
+    } else {
+      statusEl.textContent = '✗ ' + r.message;
+      toast(r.message, false);
+    }
+  } catch(e) {
+    statusEl.textContent = '✗ ' + e.message;
+    toast('压缩切换失败', false);
+  }
+}
+
+async function loadCompressionStatus() {
+  try {
+    const r = await api('GET', '/api/compression');
+    const statusEl = document.getElementById('rtkStatus');
+    if (r.enabled && r.installed) {
+      statusEl.textContent = '✓ ' + (r.version||'');
+    } else if (r.enabled) {
+      statusEl.textContent = '... 下载中';
+    } else {
+      statusEl.textContent = '';
+    }
+  } catch(e) {}
+}
+
 function saveServiceModal() { closeModal('serviceModal'); save(); }
 function saveAdvancedModal() { closeModal('advancedModal'); save(); }
 function saveAliasModal() { closeModal('aliasModal'); save(); }
