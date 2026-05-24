@@ -93,21 +93,28 @@ class TestConvertMessages(unittest.TestCase):
         self.assertEqual(result[1]["content"], "")
 
     def test_tool_result_conversion(self) -> None:
-        messages = [{
-            "role": "user",
-            "content": [
-                {
-                    "type": "tool_result",
-                    "tool_use_id": "call_123",
-                    "content": "output text"
-                }
-            ]
-        }]
+        messages = [
+            {"role": "assistant", "content": None, "tool_calls": [
+                {"id": "call_123", "type": "function", "function": {"name": "bash", "arguments": "{}"}}
+            ]},
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "tool_result",
+                        "tool_use_id": "call_123",
+                        "content": "output text"
+                    }
+                ]
+            }
+        ]
         result = convert_anthropic_messages_to_openai(messages)
-        self.assertEqual(len(result), 1)
-        self.assertEqual(result[0]["role"], "tool")
-        self.assertEqual(result[0]["tool_call_id"], "call_123")
-        self.assertEqual(result[0]["content"], "output text")
+        self.assertEqual(len(result), 2)
+        self.assertEqual(result[0]["role"], "assistant")
+        self.assertIn("tool_calls", result[0])
+        self.assertEqual(result[1]["role"], "tool")
+        self.assertEqual(result[1]["tool_call_id"], "call_123")
+        self.assertEqual(result[1]["content"], "output text")
 
     def test_thinking_and_tool_use_mixed(self) -> None:
         messages = [{
@@ -174,16 +181,23 @@ class TestConvertMessages(unittest.TestCase):
 
     def test_tool_message_with_tool_call_id(self) -> None:
         """已是 OpenAI 格式的 tool 消息应直接透传"""
-        messages = [{
-            "role": "tool",
-            "content": "command output",
-            "tool_call_id": "call_00"
-        }]
+        messages = [
+            {"role": "assistant", "content": None, "tool_calls": [
+                {"id": "call_00", "type": "function", "function": {"name": "bash", "arguments": "{}"}}
+            ]},
+            {
+                "role": "tool",
+                "content": "command output",
+                "tool_call_id": "call_00"
+            }
+        ]
         result = convert_anthropic_messages_to_openai(messages)
-        self.assertEqual(len(result), 1)
-        self.assertEqual(result[0]["role"], "tool")
-        self.assertEqual(result[0]["tool_call_id"], "call_00")
-        self.assertEqual(result[0]["content"], "command output")
+        self.assertEqual(len(result), 2)
+        self.assertEqual(result[0]["role"], "assistant")
+        self.assertIn("tool_calls", result[0])
+        self.assertEqual(result[1]["role"], "tool")
+        self.assertEqual(result[1]["tool_call_id"], "call_00")
+        self.assertEqual(result[1]["content"], "command output")
 
     def test_assistant_with_reasoning_content_openai_format(self) -> None:
         """已是 OpenAI 格式的 assistant 消息带 reasoning_content 应保留"""
@@ -285,23 +299,70 @@ class TestConvertMessages(unittest.TestCase):
 
     def test_text_and_tool_result_same_content_array(self) -> None:
         """当 user 消息 content 数组同时包含 text 和 tool_result 时，text 应在该 tool_result 消息之前"""
+        messages = [
+            {"role": "assistant", "content": None, "tool_calls": [
+                {"id": "call_001", "type": "function", "function": {"name": "bash", "arguments": "{}"}}
+            ]},
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": "请执行命令"},
+                    {
+                        "type": "tool_result",
+                        "tool_use_id": "call_001",
+                        "content": "命令输出"
+                    }
+                ]
+            }
+        ]
+        result = convert_anthropic_messages_to_openai(messages)
+        self.assertEqual(len(result), 4)
+        self.assertEqual(result[0]["role"], "assistant")
+        self.assertIn("tool_calls", result[0])
+        self.assertEqual(result[1]["role"], "tool")
+        self.assertEqual(result[1]["content"], "")  # _pad_missing_tool_results 补齐
+        self.assertEqual(result[1]["tool_call_id"], "call_001")
+        self.assertEqual(result[2]["role"], "user")
+        self.assertEqual(result[2]["content"], "请执行命令")
+        self.assertEqual(result[3]["role"], "tool")
+        self.assertEqual(result[3]["tool_call_id"], "call_001")
+
+    # ---- 孤儿 tool 清理 ----
+
+    def test_orphaned_tool_message_removed(self) -> None:
+        """role:tool 没有前驱 tool_calls → 应被清理"""
         messages = [{
-            "role": "user",
-            "content": [
-                {"type": "text", "text": "请执行命令"},
-                {
-                    "type": "tool_result",
-                    "tool_use_id": "call_001",
-                    "content": "命令输出"
-                }
-            ]
+            "role": "tool",
+            "content": "output",
+            "tool_call_id": "orphan_1"
         }]
         result = convert_anthropic_messages_to_openai(messages)
+        self.assertEqual(len(result), 0)
+
+    def test_orphaned_tool_with_valid_preceding_assistant_preserved(self) -> None:
+        """role:tool 有前驱 tool_calls → 保留"""
+        messages = [
+            {"role": "assistant", "content": None, "tool_calls": [
+                {"id": "valid_1", "type": "function", "function": {"name": "bash", "arguments": "{}"}}
+            ]},
+            {"role": "tool", "content": "output", "tool_call_id": "valid_1"}
+        ]
+        result = convert_anthropic_messages_to_openai(messages)
         self.assertEqual(len(result), 2)
-        self.assertEqual(result[0]["role"], "user")
-        self.assertEqual(result[0]["content"], "请执行命令")
-        self.assertEqual(result[1]["role"], "tool")
-        self.assertEqual(result[1]["tool_call_id"], "call_001")
+        self.assertEqual(result[1]["tool_call_id"], "valid_1")
+
+    def test_mixed_orphaned_and_valid_tool_messages(self) -> None:
+        """混合：valid tool 保留，orphan tool 被清除"""
+        messages = [
+            {"role": "assistant", "content": None, "tool_calls": [
+                {"id": "ok", "type": "function", "function": {"name": "bash", "arguments": "{}"}}
+            ]},
+            {"role": "tool", "content": "valid", "tool_call_id": "ok"},
+            {"role": "tool", "content": "orphan", "tool_call_id": "bad"},
+        ]
+        result = convert_anthropic_messages_to_openai(messages)
+        self.assertEqual(len(result), 2)
+        self.assertEqual(result[1]["tool_call_id"], "ok")
 
     # ---- tool_use 补齐（DeepSeek 兼容） ----
 

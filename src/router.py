@@ -555,9 +555,36 @@ def convert_anthropic_messages_to_openai(messages: List[Dict]) -> List[Dict]:
                     c = strip_reasoning(c)
             openai_messages.append({"role": role, "content": c})
 
-    # 补齐缺失的 tool 响应消息，兼容 DeepSeek 等严格模型
+    # 清理孤儿 tool 消息（网络中断导致的上下文损坏），再补齐缺失的 tool 响应
+    openai_messages = _strip_orphaned_tool_messages(openai_messages)
     openai_messages = _pad_missing_tool_results(openai_messages)
     return openai_messages
+
+
+def _strip_orphaned_tool_messages(messages: List[Dict]) -> List[Dict]:
+    """
+    清理孤儿 tool 消息：移除没有对应前驱 tool_calls 的 role:tool 消息。
+    网络中断可能导致对话上下文损坏，出现独立的 tool 消息引发 DeepSeek 400 错误。
+    """
+    result: List[Dict] = []
+    pending_tc_ids: set[str] = set()
+    for msg in messages:
+        role = msg.get("role", "")
+        if role == "assistant" and msg.get("tool_calls"):
+            pending_tc_ids.update(
+                tc["id"] for tc in msg["tool_calls"] if tc.get("id")
+            )
+            result.append(msg)
+        elif role == "tool":
+            tc_id = msg.get("tool_call_id")
+            if tc_id and tc_id in pending_tc_ids:
+                pending_tc_ids.discard(tc_id)
+                result.append(msg)
+            else:
+                logger.debug("[Sanitize] Dropping orphaned tool message: tool_call_id=%s", tc_id)
+        else:
+            result.append(msg)
+    return result
 
 
 def _pad_missing_tool_results(messages: List[Dict]) -> List[Dict]:
