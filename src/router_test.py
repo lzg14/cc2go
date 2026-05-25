@@ -279,7 +279,7 @@ class TestConvertMessages(unittest.TestCase):
         self.assertEqual(result[0]["reasoning_content"], "Let me read the file")
 
     def test_text_and_tool_result_same_content_array(self) -> None:
-        """当 user 消息 content 数组同时包含 text 和 tool_result 时，text 应在该 tool_result 消息之前"""
+        """当 user 消息 content 数组同时包含 text 和 tool_result 时，tool 应在 user 之前"""
         messages = [
             {"role": "assistant", "content": None, "tool_calls": [
                 {"id": "call_001", "type": "function", "function": {"name": "bash", "arguments": "{}"}}
@@ -300,10 +300,10 @@ class TestConvertMessages(unittest.TestCase):
         self.assertEqual(len(result), 3)
         self.assertEqual(result[0]["role"], "assistant")
         self.assertIn("tool_calls", result[0])
-        self.assertEqual(result[1]["role"], "user")
-        self.assertEqual(result[1]["content"], "请执行命令")
-        self.assertEqual(result[2]["role"], "tool")
-        self.assertEqual(result[2]["tool_call_id"], "call_001")
+        self.assertEqual(result[1]["role"], "tool")
+        self.assertEqual(result[1]["tool_call_id"], "call_001")
+        self.assertEqual(result[2]["role"], "user")
+        self.assertEqual(result[2]["content"], "请执行命令")
 
     # ---- 孤儿 tool 清理 ----
 
@@ -357,8 +357,8 @@ class TestConvertMessages(unittest.TestCase):
         self.assertEqual(result[1]["role"], "tool")
         self.assertEqual(result[1]["tool_call_id"], "tc_1")
 
-    def test_missing_tool_result_no_padding_for_last_assistant(self) -> None:
-        """tool_calls 后无任何 tool 响应 → 不补空（刚生成完等待结果）"""
+    def test_missing_tool_result_padded_when_next_message_exists(self) -> None:
+        """tool_calls 后无 tool 响应但有后续用户消息 → 补齐空 tool"""
         messages = [
             {"role": "user", "content": "run bash"},
             {"role": "assistant", "content": None, "tool_calls": [
@@ -367,11 +367,14 @@ class TestConvertMessages(unittest.TestCase):
             {"role": "user", "content": "never mind"},
         ]
         result = convert_anthropic_messages_to_openai(messages)
-        self.assertEqual(len(result), 3)
+        self.assertEqual(len(result), 4)
         self.assertEqual(result[0]["role"], "user")
         self.assertEqual(result[1]["role"], "assistant")
-        self.assertEqual(result[2]["role"], "user")
-        self.assertEqual(result[2]["content"], "never mind")
+        self.assertEqual(result[2]["role"], "tool")
+        self.assertEqual(result[2]["tool_call_id"], "tc_1")
+        self.assertEqual(result[2]["content"], "")
+        self.assertEqual(result[3]["role"], "user")
+        self.assertEqual(result[3]["content"], "never mind")
 
     def test_partial_tool_results_fills_only_missing(self) -> None:
         """多个 tool_call 只有部分有响应 → 只补缺失的"""
@@ -404,22 +407,45 @@ class TestConvertMessages(unittest.TestCase):
         self.assertIn("tool_calls", result[0])
 
     def test_anthropic_tool_use_followed_by_user_no_tool_result(self) -> None:
-        """Anthropic 格式 tool_use 后跟用户消息（无 tool_result）→ 补空"""
+        """Anthropic 格式 tool_use 后跟用户消息（无 tool_result）→ 补齐空 tool"""
         messages = [
             {"role": "user", "content": "搜索天气"},
             {"role": "assistant", "content": [{"type": "tool_use", "id": "tc_w", "name": "web_search", "input": {"query": "天气"}}]},
             {"role": "user", "content": "不要搜索了"},
         ]
         result = convert_anthropic_messages_to_openai(messages)
-        self.assertEqual(len(result), 3)
+        self.assertEqual(len(result), 4)
         self.assertEqual(result[0]["role"], "user")
         self.assertEqual(result[1]["role"], "assistant")
         self.assertIn("tool_calls", result[1])
-        self.assertEqual(result[2]["role"], "user")
-        self.assertEqual(result[2]["content"], "不要搜索了")
+        self.assertEqual(result[2]["role"], "tool")
+        self.assertEqual(result[2]["tool_call_id"], "tc_w")
+        self.assertEqual(result[2]["content"], "")
+        self.assertEqual(result[3]["role"], "user")
+        self.assertEqual(result[3]["content"], "不要搜索了")
 
-    def test_multiple_tool_use_sequences_both_incomplete(self) -> None:
-        """两轮 tool_use 都不完整 → 不补空（都无后续 tool 消息）"""
+    def test_tool_calls_followed_by_user_without_any_tool_result(self) -> None:
+        """tool_calls 后跟用户消息（无任何 tool 结果）→ 补齐空 tool（DeepSeek 400 错误根因）"""
+        messages = [
+            {"role": "user", "content": "帮我处理吧"},
+            {"role": "assistant", "content": None, "tool_calls": [
+                {"id": "tc_git", "type": "function", "function": {"name": "bash", "arguments": "{}"}}
+            ]},
+            {"role": "user", "content": "5分钟肯定不够，我自己执行吧"},
+        ]
+        result = convert_anthropic_messages_to_openai(messages)
+        self.assertEqual(len(result), 4)
+        self.assertEqual(result[0]["role"], "user")
+        self.assertEqual(result[1]["role"], "assistant")
+        self.assertIn("tool_calls", result[1])
+        self.assertEqual(result[2]["role"], "tool")
+        self.assertEqual(result[2]["tool_call_id"], "tc_git")
+        self.assertEqual(result[2]["content"], "")
+        self.assertEqual(result[3]["role"], "user")
+        self.assertEqual(result[3]["content"], "5分钟肯定不够，我自己执行吧")
+
+    def test_multiple_tool_use_sequences_first_incomplete_padded(self) -> None:
+        """两轮 tool_use：第一轮有后续消息 → 补齐；第二轮是最后一条 → 不补"""
         messages = [
             {"role": "user", "content": "run command"},
             {"role": "assistant", "content": None, "tool_calls": [
@@ -431,13 +457,16 @@ class TestConvertMessages(unittest.TestCase):
             ]},
         ]
         result = convert_anthropic_messages_to_openai(messages)
-        self.assertEqual(len(result), 4)
+        self.assertEqual(len(result), 5)
         self.assertEqual(result[0]["role"], "user")
         self.assertEqual(result[1]["role"], "assistant")
         self.assertIn("tool_calls", result[1])
-        self.assertEqual(result[2]["role"], "user")
-        self.assertEqual(result[3]["role"], "assistant")
-        self.assertIn("tool_calls", result[3])
+        self.assertEqual(result[2]["role"], "tool")
+        self.assertEqual(result[2]["tool_call_id"], "tc_1")
+        self.assertEqual(result[2]["content"], "")
+        self.assertEqual(result[3]["role"], "user")
+        self.assertEqual(result[4]["role"], "assistant")
+        self.assertIn("tool_calls", result[4])
 
 
 class TestSanitizeToolName(unittest.TestCase):

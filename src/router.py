@@ -517,6 +517,9 @@ def convert_anthropic_messages_to_openai(messages: List[Dict]) -> List[Dict]:
                         "content": str(result_content) if result_content else ""
                     })
 
+            # 添加 tool 结果（在用户消息之前，确保 tool 响应紧随 assistant tool_calls）
+            openai_messages.extend(tool_results)
+
             # 合并 content_items 和 tool_calls 到一条消息
             if content_items or tool_calls_list or reasoning_content:
                 msg_dict = {"role": role}
@@ -539,11 +542,8 @@ def convert_anthropic_messages_to_openai(messages: List[Dict]) -> List[Dict]:
                 # content 数组处理后没有任何产出（如 user 消息仅含 thinking 块），且无 tool_result
                 openai_messages.append({"role": role, "content": ""})
             # else: content_items 等都为空但有 tool_results 时，
-            # 不单独发 user 消息，直接 extend tool_results
+            # 不单独发 user 消息，直接 extend tool_results 已在前面执行
             #（避免产生 content=None 的空 user 消息）
-
-            # 添加 tool 结果（跟在用户消息之后）
-            openai_messages.extend(tool_results)
 
         elif content is not None:
             # content="" 不应被丢弃：assistant 空 content 消息在多轮 tool_use 对话中常见，
@@ -613,10 +613,13 @@ def _pad_missing_tool_results(messages: List[Dict]) -> List[Dict]:
                 i += 1
 
             # 为缺失的 id 插入空 tool 消息
-            # 仅在已有部分 tool 消息时补齐（部分网络中断），
-            # 完全没有 tool 消息 → 说明刚生成完 tool_calls 等待工具结果，不应硬塞
+            # 补齐条件：
+            # 1) 已有部分 tool 消息但缺失部分（部分网络中断）→ 补齐缺失的
+            # 2) 没有任何 tool 消息但有后续非 tool 消息（对话已继续）→ 全部补齐
+            # 最后一条消息是 tool_calls → 不补（刚生成完等待工具结果）
             missing = tc_ids - handled
-            if handled and missing:
+            has_next_msg = i < len(messages)
+            if missing and (handled or has_next_msg):
                 for tc_id in sorted(missing):
                     result.append({
                         "role": "tool",
